@@ -34,5 +34,14 @@ iconutil -c icns "$ICONSET" -o "$ICON_OUTPUT"
 cp "$ICON_OUTPUT" "$APP/Contents/Resources/Pingo.icns"
 
 swiftc -O -o "$APP/Contents/MacOS/Pingo" main.swift
-codesign --force --sign "$SIGNING_IDENTITY" "$APP"
+
+# Hardened Runtime (--options runtime) is required for notarization and blocks
+# code injection into the running app. A secure timestamp is only meaningful
+# with a real Developer ID, so skip it for ad-hoc ("-") signing to keep offline
+# builds working.
+codesign_flags=(--force --options runtime --sign "$SIGNING_IDENTITY")
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+	codesign_flags+=(--timestamp)
+fi
+codesign "${codesign_flags[@]}" "$APP"
 echo "Built $APP — launch with: open $APP"

@@ -6,6 +6,10 @@ import CoreWLAN
 // single provider's blip doesn't trigger a false "internet down" alert.
 private let pingHosts = ["1.1.1.1", "8.8.8.8"]
 
+// Where "Check for Updates…" sends the user. Hardcoded rather than following a
+// URL taken from the API response — see AppDelegate.trustedReleaseURL.
+private let releasesPageURL = URL(string: "https://github.com/jonasdkhansen/pingo/releases/latest")!
+
 private enum ConnectionState {
     case online, offline, paused
 }
@@ -541,7 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
                 alert.addButton(withTitle: "Open Release")
                 alert.addButton(withTitle: "Later")
                 if alert.runModal() == .alertFirstButtonReturn {
-                    NSWorkspace.shared.open(release.htmlURL)
+                    NSWorkspace.shared.open(Self.trustedReleaseURL(release.htmlURL))
                 }
             } else {
                 alert.messageText = "Pingo is up to date"
@@ -555,6 +559,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
+    }
+
+    /// `NSWorkspace.open` launches the default handler for *any* URL scheme —
+    /// including file:// and third-party custom schemes — and `html_url` arrives
+    /// in the GitHub API response. Follow it only when it's an HTTPS github.com
+    /// link; otherwise fall back to the canonical releases page instead of
+    /// trusting a network-supplied URL.
+    private static func trustedReleaseURL(_ url: URL) -> URL {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              host == "github.com" || host.hasSuffix(".github.com") else {
+            return releasesPageURL
+        }
+        return url
     }
 
     private func viewItem(_ view: NSView) -> NSMenuItem {
