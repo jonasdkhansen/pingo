@@ -885,13 +885,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     private func notify(title: String, body: String) {
-        let escapedTitle = title.replacingOccurrences(of: "\"", with: "\\\"")
-        let escapedBody = body.replacingOccurrences(of: "\"", with: "\\\"")
-        let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\" sound name \"Submarine\""
+        let script = """
+        on run argv
+            display notification (item 2 of argv) with title (item 1 of argv) sound name "Submarine"
+        end run
+        """
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        task.arguments = ["-e", script]
-        try? task.run()
+        task.arguments = ["-e", script, "--", title, body]
+        do {
+            try task.run()
+        } catch {
+            NSLog("Pingo notification failed: %@", error.localizedDescription)
+        }
     }
 
     private static func formatDuration(_ seconds: TimeInterval) -> String {

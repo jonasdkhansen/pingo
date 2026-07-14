@@ -12,7 +12,7 @@
   [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?style=flat-square&logo=swift&logoColor=white)](main.swift)
   [![Latest release](https://img.shields.io/github/v/release/jonasdkhansen/pingo?style=flat-square&color=2ea44f)](https://github.com/jonasdkhansen/pingo/releases/latest)
 
-  [**Download Pingo for macOS**](https://github.com/jonasdkhansen/pingo/releases/download/v1.1.0/Pingo-1.1.0-macos.zip)
+  [**Download Pingo for macOS**](https://github.com/jonasdkhansen/pingo/releases/latest)
 </div>
 
 ---
@@ -53,7 +53,7 @@ Pingo checks that the network and saved credentials are available before disconn
 
 ## Install
 
-1. Download [Pingo-1.1.0-macos.zip](https://github.com/jonasdkhansen/pingo/releases/download/v1.1.0/Pingo-1.1.0-macos.zip).
+1. Download the latest macOS archive from [GitHub Releases](https://github.com/jonasdkhansen/pingo/releases/latest).
 2. Extract the archive and move `Pingo.app` to your Applications folder.
 3. Open Pingo. Its antenna indicator will appear in the menu bar.
 
@@ -66,6 +66,12 @@ Open **System Settings > General > Login Items**, select **+**, and add `Pingo.a
 ### Notifications
 
 Notifications use macOS's script notification channel and appear as **Script Editor** under **System Settings > Notifications**. Allow notifications there if Pingo alerts are not visible.
+
+## Privacy
+
+Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
+
+When Auto-Fix is enabled, Pingo asks macOS for the current Wi-Fi network name and retrieves its saved password through the system Keychain API so CoreWLAN can reconnect. Neither value is persisted, logged, or transmitted by Pingo.
 
 ## Build from source
 
@@ -104,6 +110,10 @@ Pingo intentionally keeps its implementation small. The complete app lives in [m
 ## Test an outage
 
 Turn Wi-Fi off for about 20 seconds. Pingo should report that the internet is down, then show a recovery notification after Wi-Fi is restored.
+
+## License
+
+Pingo is available under the [Apache License 2.0](LICENSE).
 
 ---
 

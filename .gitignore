@@ -1,6 +1,7 @@
 # Build output
 Pingo.app/
 *.app/
+*.zip
 
 # macOS
 .DS_Store
