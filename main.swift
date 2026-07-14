@@ -394,6 +394,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private let checkQueue = DispatchQueue(label: "network-check")
     private let locationManager = CLLocationManager()
 
+    /// macOS grants either `.authorizedWhenInUse` or `.authorizedAlways` in
+    /// response to `requestWhenInUseAuthorization()`; both permit reading
+    /// Wi-Fi network names, so every Location-access check must accept both.
+    private var hasLocationAccess: Bool {
+        switch locationManager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse: return true
+        default: return false
+        }
+    }
+
     private var isOnline: Bool?          // nil until the first check completes
     private var downSince: Date?
     private var checkInFlight = false
@@ -448,9 +458,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         locationManager.delegate = self
         if backupSSIDData != nil && (backupBSSID == nil || backupSecurityFingerprint == nil) {
             disableBackupNetwork()
-        }
-        if autoFixEnabled, locationManager.authorizationStatus == .notDetermined {
-            locationManager.requestWhenInUseAuthorization()
         }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -509,6 +516,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
         refreshUI()
         applyMonitoringState(initial: true)
+        DispatchQueue.main.async { [weak self] in
+            self?.requestLocationAccessAtLaunch()
+        }
     }
 
     @objc private func checkForUpdates() {
@@ -714,13 +724,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private func refreshBackupMenu() {
         refreshBackupMenuHeader()
 
-        guard locationManager.authorizationStatus == .authorizedAlways else {
+        guard hasLocationAccess else {
             let item = NSMenuItem(title: "Location Access Required", action: nil, keyEquivalent: "")
             item.isEnabled = false
             backupMenu.addItem(item)
             if locationManager.authorizationStatus == .notDetermined {
+                NSApp.activate(ignoringOtherApps: true)
                 locationManager.requestWhenInUseAuthorization()
-            } else {
+            } else if locationManager.authorizationStatus == .denied ||
+                        locationManager.authorizationStatus == .restricted {
                 let settings = NSMenuItem(title: "Open Location Settings…",
                                           action: #selector(openLocationSettings), keyEquivalent: "")
                 settings.target = self
@@ -845,6 +857,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             return
         }
         NSWorkspace.shared.open(url)
+    }
+
+    private func requestLocationAccessAtLaunch() {
+        switch locationManager.authorizationStatus {
+        case .notDetermined:
+            NSApp.activate(ignoringOtherApps: true)
+            locationManager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Location Access Needed"
+            alert.informativeText = "Pingo needs Location access to identify Wi-Fi network names for Auto-Fix and backup switching."
+            alert.addButton(withTitle: "Open Location Settings")
+            alert.addButton(withTitle: "Not Now")
+            if alert.runModal() == .alertFirstButtonReturn {
+                openLocationSettings()
+            }
+        case .authorizedAlways, .authorizedWhenInUse:
+            break
+        @unknown default:
+            break
+        }
     }
 
     // MARK: - Enable / disable
@@ -1018,7 +1053,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         guard autoFixEnabled, recoveryState == .idle else { return }
         if let last = lastAutoFix, Date().timeIntervalSince(last) < autoFixCooldown { return }
 
-        guard locationManager.authorizationStatus == .authorizedAlways else {
+        guard hasLocationAccess else {
+            if locationManager.authorizationStatus == .notDetermined {
+                NSApp.activate(ignoringOtherApps: true)
+                locationManager.requestWhenInUseAuthorization()
+            }
             notify(title: "Auto-Fix Wi-Fi needs Location access",
                    body: "Allow Location access for Pingo so it can identify and reconnect your current Wi-Fi network.")
             return
@@ -1057,7 +1096,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
               !backupAttemptedThisOutage, recoveryState == .idle else { return }
         guard CWWiFiClient.shared().interface()?.ssidData() != backupSSIDData else { return }
 
-        guard locationManager.authorizationStatus == .authorizedAlways else {
+        guard hasLocationAccess else {
+            if locationManager.authorizationStatus == .notDetermined {
+                NSApp.activate(ignoringOtherApps: true)
+                locationManager.requestWhenInUseAuthorization()
+            }
             backupAttemptedThisOutage = true
             notify(title: "Backup Network needs Location access",
                      body: "Allow Location access for Pingo so it can find and join “\(backupSSIDName)”.")
@@ -1118,13 +1161,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
         return connectWifi(to: ssidData, named: ssid, bssid: bssid,
                            securityFingerprint: securityFingerprint(of: currentNetwork),
-                           allowOpenNetwork: true)
+                           allowPasswordless: true)
     }
 
     private static func connectWifi(to ssidData: Data, named ssid: String, bssid: String,
                                     securityFingerprint expectedSecurity: [Int],
                                     savedPassword: String? = nil,
-                                    allowOpenNetwork: Bool = false) -> String? {
+                                    allowPasswordless: Bool = false) -> String? {
         guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
             return "The Wi-Fi interface is unavailable or powered off."
         }
@@ -1144,7 +1187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
         let password: String?
         if network.supportsSecurity(.none) {
-            guard allowOpenNetwork else {
+            guard allowPasswordless else {
                 return "Pingo won't automatically join open Wi-Fi networks."
             }
             password = nil
@@ -1155,7 +1198,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             case .found(let savedPassword):
                 password = savedPassword
             case .notFound:
-                return "No saved password is available for “\(ssid)”."
+                guard allowPasswordless else {
+                    return "No saved password is available for “\(ssid)”."
+                }
+                password = nil
             case .accessDenied:
                 return "Pingo couldn't access Wi-Fi passwords. Quit and reopen Pingo, then allow Keychain access when asked."
             }

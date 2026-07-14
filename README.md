@@ -54,10 +54,10 @@ Open Pingo from the menu bar to see the current status, recent history, session 
 
 Auto-Fix is optional and disabled by default. When enabled, Pingo identifies the active access point, disconnects from it, and explicitly rejoins that same access point. The Wi-Fi radio stays powered on throughout the process.
 
-Pingo verifies the access point's BSSID and advertised security capabilities before disconnecting. It refuses same-name access points with a different identity or security configuration. Auto-Fix can rejoin the open network already in use, but open networks remain ineligible as backup networks. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
+Pingo verifies the access point's BSSID and advertised security capabilities before disconnecting. It refuses same-name access points with a different identity or security configuration. Auto-Fix can reconnect the current network without a saved password when passwordless association succeeds, but backup networks remain protected-only. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
 
 > [!NOTE]
-> macOS requires Location access to reveal Wi-Fi network names. Pingo requests this permission when Auto-Fix is enabled or when you open the backup network selector.
+> macOS requires Location access to reveal Wi-Fi network names. Pingo requests this on first launch, and if permission was denied, Pingo offers an **Open Location Settings** shortcut so you can re-enable access.
 
 ## Backup network
 
