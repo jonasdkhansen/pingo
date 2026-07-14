@@ -948,9 +948,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             if monitoringEnabled {
                 if consecutiveFailures >= 3 {
                     maybeSwitchToBackup()
-                } else {
-                    maybeAutoFixWifi()
                 }
+                // If backup failover is unavailable or already attempted, keep
+                // retrying Auto-Fix after its cooldown instead of giving up.
+                maybeAutoFixWifi()
             }
         }
 
@@ -1066,7 +1067,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         backupAttemptedThisOutage = true
         recoveryState = .joiningBackup
         let generation = recoveryGeneration
-                let backupPassword = wifiPasswords[backupSSIDData]
+        let backupPassword = wifiPasswords[backupSSIDData]
         notify(title: "Switching to Backup Network",
              body: "Three checks failed — trying “\(backupSSIDName)”.")
 
@@ -1116,12 +1117,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
 
         return connectWifi(to: ssidData, named: ssid, bssid: bssid,
-                           securityFingerprint: securityFingerprint(of: currentNetwork))
+                           securityFingerprint: securityFingerprint(of: currentNetwork),
+                           allowOpenNetwork: true)
     }
 
     private static func connectWifi(to ssidData: Data, named ssid: String, bssid: String,
                                     securityFingerprint expectedSecurity: [Int],
-                                    savedPassword: String? = nil) -> String? {
+                                    savedPassword: String? = nil,
+                                    allowOpenNetwork: Bool = false) -> String? {
         guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
             return "The Wi-Fi interface is unavailable or powered off."
         }
@@ -1140,10 +1143,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
 
         let password: String?
-        guard !network.supportsSecurity(.none) else {
-            return "Pingo won't automatically join open Wi-Fi networks."
-        }
-        if let savedPassword {
+        if network.supportsSecurity(.none) {
+            guard allowOpenNetwork else {
+                return "Pingo won't automatically join open Wi-Fi networks."
+            }
+            password = nil
+        } else if let savedPassword {
             password = savedPassword
         } else {
             switch savedWifiPassword(for: ssidData) {
