@@ -13,13 +13,17 @@
     <key>CFBundleIconFile</key>
     <string>Pingo.icns</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>1.1.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <key>NSLocationUsageDescription</key>
+    <string>Pingo uses the current Wi-Fi network name only to reconnect that same network when Auto-Fix is enabled.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Pingo uses the current Wi-Fi network name only to reconnect that same network when Auto-Fix is enabled.</string>
     <key>LSUIElement</key>
     <true/>
 </dict>

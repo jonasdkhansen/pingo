@@ -1,4 +1,6 @@
 import AppKit
+import CoreLocation
+import CoreWLAN
 
 // Ping several public resolvers; we're "online" if any one of them replies, so a
 // single provider's blip doesn't trigger a false "internet down" alert.
@@ -19,48 +21,71 @@ private let timeFormatter: DateFormatter = {
 private let menuRowWidth: CGFloat = 320
 private let menuMargin: CGFloat = 14
 
-/// The round macOS "?" button; clicking it pops up a short explanation.
+/// Compact contextual help that opens a structured native popover on click.
 final class HelpButton: NSButton {
     private static var popover: NSPopover?
+    private static weak var activeButton: HelpButton?
+    private let helpTitle: String
     private let helpText: String
 
-    init(_ helpText: String) {
-        self.helpText = helpText
-        super.init(frame: .zero)
-        bezelStyle = .helpButton
-        title = ""
-        controlSize = .small
+    init(title: String, text: String) {
+        helpTitle = title
+        helpText = text
+        super.init(frame: NSRect(x: 0, y: 0, width: 22, height: 22))
+        isBordered = false
+        self.title = ""
+        image = NSImage(systemSymbolName: "info.circle",
+                        accessibilityDescription: "About \(title)")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .medium))
+        contentTintColor = .tertiaryLabelColor
+        focusRingType = .exterior
+        setAccessibilityLabel("About \(title)")
+        toolTip = "About \(title)"
         target = self
         action = #selector(showHelp)
-        sizeToFit()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     @objc private func showHelp() {
+        if Self.activeButton === self, Self.popover?.isShown == true {
+            Self.closeHelp()
+            return
+        }
         Self.popover?.close()
 
-        let label = NSTextField(wrappingLabelWithString: helpText)
-        label.font = .systemFont(ofSize: 12)
-        label.preferredMaxLayoutWidth = 210
-        let textHeight = label.fittingSize.height
-        label.frame = NSRect(x: 12, y: 10, width: 210, height: textHeight)
+        let width: CGFloat = 238
+        let heading = NSTextField(labelWithString: helpTitle)
+        heading.font = .systemFont(ofSize: 13, weight: .semibold)
+        heading.frame = NSRect(x: 14, y: 0, width: width, height: 18)
 
-        let content = NSView(frame: NSRect(x: 0, y: 0, width: 234, height: textHeight + 20))
-        content.addSubview(label)
+        let body = NSTextField(wrappingLabelWithString: helpText)
+        body.font = .systemFont(ofSize: 12)
+        body.textColor = .secondaryLabelColor
+        body.preferredMaxLayoutWidth = width
+        let bodyHeight = body.fittingSize.height
+        body.frame = NSRect(x: 14, y: 14, width: width, height: bodyHeight)
+        heading.frame.origin.y = body.frame.maxY + 8
+
+        let contentHeight = heading.frame.maxY + 14
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: width + 28, height: contentHeight))
+        content.addSubview(heading)
+        content.addSubview(body)
         let controller = NSViewController()
         controller.view = content
 
         let popover = NSPopover()
         popover.behavior = .transient
         popover.contentViewController = controller
-        popover.show(relativeTo: bounds, of: self, preferredEdge: .maxX)
+        popover.show(relativeTo: bounds, of: self, preferredEdge: .minX)
         Self.popover = popover
+        Self.activeButton = self
     }
 
     static func closeHelp() {
         popover?.close()
         popover = nil
+        activeButton = nil
     }
 }
 
@@ -99,7 +124,7 @@ final class MenuRow: NSView {
         iconView.imageScaling = .scaleNone
         addSubview(iconView)
 
-        let helpButton = HelpButton(helpText)
+        let helpButton = HelpButton(title: title, text: helpText)
         helpButton.setFrameOrigin(NSPoint(x: menuRowWidth - helpButton.frame.width - 12,
                                           y: (frame.height - helpButton.frame.height) / 2))
         addSubview(helpButton)
@@ -157,6 +182,36 @@ final class MenuRow: NSView {
     }
 }
 
+final class GreenSwitch: NSButton {
+    override var intrinsicContentSize: NSSize { NSSize(width: 32, height: 18) }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: 32, height: 18))
+        setButtonType(.toggle)
+        isBordered = false
+        title = ""
+        focusRingType = .exterior
+        setAccessibilityLabel("Auto-Fix Wi-Fi")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = bounds.insetBy(dx: 0, dy: 1)
+        let trackColor = state == .on
+            ? NSColor.systemGreen
+            : NSColor.tertiaryLabelColor.withAlphaComponent(0.45)
+        trackColor.withAlphaComponent(isHighlighted ? 0.75 : 1).setFill()
+        NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2).fill()
+
+        let knobSize = track.height - 4
+        let knobX = state == .on ? track.maxX - knobSize - 2 : track.minX + 2
+        NSColor.white.setFill()
+        NSBezierPath(ovalIn: NSRect(x: knobX, y: track.minY + 2,
+                                    width: knobSize, height: knobSize)).fill()
+    }
+}
+
 /// The big header at the top of the menu: a tinted circular badge with an SF
 /// Symbol, a bold verdict ("Connected"), and a detail line underneath.
 final class StatusHeaderView: NSView {
@@ -189,7 +244,7 @@ final class StatusHeaderView: NSView {
         subtitleLabel.frame = NSRect(x: 60, y: 13, width: menuRowWidth - 60 - 40, height: 14)
         addSubview(subtitleLabel)
 
-        let helpButton = HelpButton(helpText)
+        let helpButton = HelpButton(title: "Connection status", text: helpText)
         helpButton.setFrameOrigin(NSPoint(x: menuRowWidth - helpButton.frame.width - 12,
                                           y: (frame.height - helpButton.frame.height) / 2))
         addSubview(helpButton)
@@ -272,7 +327,7 @@ final class HistoryView: NSView {
         caption.frame = NSRect(x: menuMargin, y: 7, width: 60, height: 11)
         addSubview(caption)
 
-        let helpButton = HelpButton(helpText)
+        let helpButton = HelpButton(title: "Connection history", text: helpText)
         helpButton.setFrameOrigin(NSPoint(x: menuRowWidth - helpButton.frame.width - 12,
                                           y: (frame.height - helpButton.frame.height) / 2))
         addSubview(helpButton)
@@ -310,11 +365,12 @@ final class HistoryView: NSView {
 
 // MARK: - App delegate
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLocationManagerDelegate {
     private var statusItem: NSStatusItem!
     private var timer: Timer?
     private var menuRefreshTimer: Timer?
     private let checkQueue = DispatchQueue(label: "network-check")
+    private let locationManager = CLLocationManager()
 
     private var isOnline: Bool?          // nil until the first check completes
     private var downSince: Date?
@@ -350,10 +406,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var historyView = HistoryView(
         helpText: "The most recent checks, newest on the right — green means the internet answered, red means it didn't.")
     private var pauseRow: MenuRow!
-    private var autoFixSwitch: NSSwitch!
+    private var autoFixSwitch: GreenSwitch!
     private var intervalValueLabel: NSTextField!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        locationManager.delegate = self
+        if autoFixEnabled, locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        }
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         let menu = NSMenu()
@@ -428,7 +488,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         container.addSubview(pingsTile)
         container.addSubview(failedTile)
 
-        let helpButton = HelpButton("This session's numbers: the share of checks the internet answered, how many checks have run, and how many failed.")
+        let helpButton = HelpButton(
+            title: "Session statistics",
+            text: "This session's numbers: the share of checks the internet answered, how many checks have run, and how many failed.")
         helpButton.setFrameOrigin(NSPoint(x: menuRowWidth - helpButton.frame.width - 12,
                                           y: (container.frame.height - helpButton.frame.height) / 2))
         container.addSubview(helpButton)
@@ -446,7 +508,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.frame = NSRect(x: menuMargin, y: 36, width: 140, height: 16)
         container.addSubview(title)
 
-        let helpButton = HelpButton("How often Pingo pings \(pingHosts.joined(separator: " and ")) to see if the internet is answering.")
+        let helpButton = HelpButton(
+            title: "Check interval",
+            text: "How often Pingo pings \(pingHosts.joined(separator: " and ")) to see if the internet is answering.")
         helpButton.setFrameOrigin(NSPoint(x: menuRowWidth - helpButton.frame.width - 12, y: 34))
         container.addSubview(helpButton)
 
@@ -496,17 +560,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         label.frame = NSRect(x: 38, y: 6, width: 150, height: 18)
         container.addSubview(label)
 
-        autoFixSwitch = NSSwitch()
-        autoFixSwitch.controlSize = .small
+        autoFixSwitch = GreenSwitch()
         autoFixSwitch.target = self
         autoFixSwitch.action = #selector(autoFixSwitchChanged(_:))
         autoFixSwitch.state = autoFixEnabled ? .on : .off
-        autoFixSwitch.sizeToFit()
+        autoFixSwitch.setFrameSize(autoFixSwitch.intrinsicContentSize)
         autoFixSwitch.setFrameOrigin(NSPoint(x: container.frame.width - autoFixSwitch.frame.width - 14,
                                              y: (container.frame.height - autoFixSwitch.frame.height) / 2))
         container.addSubview(autoFixSwitch)
 
-        let helpButton = HelpButton("When the internet stops answering, automatically turn Wi-Fi off and back on — the classic fix for a connection that looks fine but is stuck. Runs at most once per minute so a real outage isn't made worse.")
+        let helpButton = HelpButton(
+            title: "Auto-Fix Wi-Fi",
+            text: "When the internet stops answering, reconnect the same Wi-Fi network without powering Wi-Fi off. Location access is required so Pingo can identify the network name. Runs at most once per minute so a real outage isn't made worse.")
         helpButton.setFrameOrigin(NSPoint(x: autoFixSwitch.frame.minX - helpButton.frame.width - 8,
                                           y: (container.frame.height - helpButton.frame.height) / 2))
         container.addSubview(helpButton)
@@ -514,9 +579,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return viewItem(container)
     }
 
-    @objc private func autoFixSwitchChanged(_ sender: NSSwitch) {
+    @objc private func autoFixSwitchChanged(_ sender: GreenSwitch) {
         autoFixEnabled = sender.state == .on
         UserDefaults.standard.set(autoFixEnabled, forKey: "autoFixWifi")
+        if autoFixEnabled, locationManager.authorizationStatus == .notDetermined {
+            locationManager.requestWhenInUseAuthorization()
+        }
     }
 
     // MARK: - Enable / disable
@@ -655,27 +723,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Auto-fix Wi-Fi
 
-    /// Cycles Wi-Fi off and on when checks fail — the classic fix for a network
-    /// that shows as connected but has silently stopped passing traffic.
+    /// Remembers and reconnects the active Wi-Fi network when checks fail,
+    /// without power-cycling the Wi-Fi radio.
     private func maybeAutoFixWifi() {
         guard autoFixEnabled, !autoFixInFlight else { return }
         if let last = lastAutoFix, Date().timeIntervalSince(last) < autoFixCooldown { return }
+
+        guard locationManager.authorizationStatus == .authorizedAlways else {
+            notify(title: "Auto-Fix Wi-Fi needs Location access",
+                   body: "Allow Location access for Pingo so it can identify and reconnect your current Wi-Fi network.")
+            return
+        }
+
         autoFixInFlight = true
         lastAutoFix = Date()
 
         notify(title: "Auto-Fix Wi-Fi",
-               body: "Internet not answering — turning Wi-Fi off and on again.")
+               body: "Internet not answering — reconnecting the current Wi-Fi network.")
 
         DispatchQueue.global().async { [weak self] in
-            if let device = Self.wifiDevice() {
-                Self.setWifiPower(device, on: false)
-                Thread.sleep(forTimeInterval: 2)
-                Self.setWifiPower(device, on: true)
-            }
+            let reconnectError = Self.reconnectCurrentWifi()
             DispatchQueue.main.async {
                 self?.autoFixInFlight = false
-                // Give Wi-Fi a moment to reassociate, then verify right away
-                // instead of waiting for the next scheduled check.
+                if let reconnectError {
+                    self?.notify(title: "Auto-Fix Wi-Fi couldn't reconnect", body: reconnectError)
+                    return
+                }
+                // Give the network stack a moment to settle, then verify right
+                // away instead of waiting for the next scheduled check.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
                     self?.runCheck()
                 }
@@ -683,40 +758,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Finds the Wi-Fi interface name (usually "en0") from networksetup.
-    private static func wifiDevice() -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
-        task.arguments = ["-listallhardwareports"]
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
-        guard (try? task.run()) != nil else { return nil }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        guard let output = String(data: data, encoding: .utf8) else { return nil }
+    /// Returns an error message on failure. Every prerequisite is resolved
+    /// before disassociating, so a failed preflight leaves Wi-Fi untouched.
+    private static func reconnectCurrentWifi() -> String? {
+        guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
+            return "The Wi-Fi interface is unavailable or powered off."
+        }
+        guard let ssidData = interface.ssidData(),
+              let ssid = interface.ssid(), !ssid.isEmpty else {
+            return "Pingo couldn't identify the current Wi-Fi network."
+        }
 
-        var inWifiSection = false
-        for line in output.split(separator: "\n") {
-            if line.hasPrefix("Hardware Port:") {
-                inWifiSection = line.contains("Wi-Fi") || line.contains("AirPort")
-            } else if inWifiSection, line.hasPrefix("Device:") {
-                return line.dropFirst("Device:".count).trimmingCharacters(in: .whitespaces)
+        let networks: Set<CWNetwork>
+        do {
+            networks = try interface.scanForNetworks(withSSID: ssidData)
+        } catch {
+            return "The current network couldn't be found: \(error.localizedDescription)"
+        }
+        guard let network = networks.max(by: { $0.rssiValue < $1.rssiValue }) else {
+            return "The Wi-Fi network “\(ssid)” is no longer in range."
+        }
+
+        var password: NSString?
+        if !network.supportsSecurity(.none) {
+            let userStatus = CWKeychainFindWiFiPassword(.user, ssidData, &password)
+            if userStatus != errSecSuccess {
+                let systemStatus = CWKeychainFindWiFiPassword(.system, ssidData, &password)
+                guard systemStatus == errSecSuccess, password != nil else {
+                    return "No saved password is available for “\(ssid)”."
+                }
             }
         }
-        return nil
-    }
 
-    private static func setWifiPower(_ device: String, on: Bool) {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
-        task.arguments = ["-setairportpower", device, on ? "on" : "off"]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
+        interface.disassociate()
+        Thread.sleep(forTimeInterval: 1)
         do {
-            try task.run()
-            task.waitUntilExit()
-        } catch {}
+            try interface.associate(to: network, password: password as String?)
+            return nil
+        } catch {
+            return "Could not rejoin “\(ssid)”: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Icon & notifications

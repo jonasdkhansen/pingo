@@ -21,7 +21,7 @@ Clicking the menu bar icon opens a small dashboard:
 - A **history bar** — the most recent checks as green/red bars (newest on the right), so a flaky connection is visible at a glance.
 - **Pause/Resume Monitoring** — stops pinging entirely; the icon dims to show monitoring is off.
 - **Check Now** — runs an immediate one-off check (works even while paused).
-- **Auto-Fix Wi-Fi** — off by default. When enabled, if the internet stops answering Pingo turns Wi-Fi off and back on automatically (the classic fix for a connection that looks connected but has silently died), then re-checks a few seconds later. To avoid fighting a real outage, it won't cycle Wi-Fi more than once per minute.
+- **Auto-Fix Wi-Fi** — off by default. When enabled, if the internet stops answering Pingo remembers the active Wi-Fi network, disconnects it, and explicitly rejoins that same network without turning the Wi-Fi radio off, then re-checks a few seconds later. macOS requires Location access to read the current network name. To avoid fighting a real outage, Pingo won't reconnect more than once per minute.
 - A **check interval** slider (1–60 seconds) to control how often Pingo pings. The interval and pause state are remembered across restarts.
 
 Every section has a small **?** button — click it for a popup explaining what that feature does.
