@@ -76,7 +76,14 @@ The backup must be protected and have a password already saved in the macOS Keyc
 2. Extract the archive and move `Pingo.app` to your Applications folder.
 3. Open Pingo. Its antenna indicator will appear in the menu bar.
 
-Pingo is ad-hoc signed. On first launch, macOS may ask you to approve it under **System Settings > Privacy & Security**.
+Pingo is ad-hoc signed and is not Apple-notarized. On first launch, macOS may show **“Pingo” Not Opened** with only **Done** and **Move to Bin**. Moving the app to Applications does not remove this warning. Open Terminal and run:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Pingo.app
+open /Applications/Pingo.app
+```
+
+This removes the quarantine flag from the downloaded app and launches it. Only run this command after downloading Pingo from this repository's official GitHub release.
 
 ### Update
 
