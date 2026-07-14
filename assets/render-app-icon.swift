@@ -58,6 +58,15 @@ source.draw(
     hints: [.interpolation: NSImageInterpolation.high]
 )
 
+let originalFrameCover = NSBezierPath(ovalIn: NSRect(x: 11, y: 11, width: 1002, height: 1002))
+for width in stride(from: 116.0, through: 34.0, by: -2.0) {
+    let progress = (116.0 - width) / 82.0
+    let alpha = 0.025 + (progress * 0.035)
+    NSColor(calibratedRed: 0.025, green: 0.09, blue: 0.13, alpha: alpha).setStroke()
+    originalFrameCover.lineWidth = width
+    originalFrameCover.stroke()
+}
+
 if let topGlass = NSGradient(colorsAndLocations:
     (NSColor.white.withAlphaComponent(0.20), 0),
     (NSColor.white.withAlphaComponent(0.05), 0.24),
