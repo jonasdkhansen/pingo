@@ -90,7 +90,7 @@ Notifications use macOS's script notification channel and appear as **Script Edi
 
 Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. When you choose **Check for Updates…**, Pingo makes a single request to the GitHub Releases API; it does not check in the background. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
 
-For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and retrieves saved passwords through the system Keychain API when connecting. The selected backup network is stored in `UserDefaults`; passwords are never persisted, logged, or transmitted by Pingo.
+For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and retrieves saved passwords through the system Keychain API when selecting or connecting to a protected network. The selected backup network is stored in `UserDefaults`; passwords are kept only in memory and are never persisted, logged, or transmitted by Pingo.
 
 ## Build from source
 
