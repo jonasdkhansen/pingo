@@ -52,9 +52,9 @@ Open Pingo from the menu bar to see the current status, recent history, session 
 
 ## Auto-Fix Wi-Fi
 
-Auto-Fix is optional and disabled by default. When enabled, Pingo remembers the active Wi-Fi network, disconnects from it, and explicitly rejoins the same network. The Wi-Fi radio stays powered on throughout the process.
+Auto-Fix is optional and disabled by default. When enabled, Pingo identifies the active access point, disconnects from it, and explicitly rejoins that same access point. The Wi-Fi radio stays powered on throughout the process.
 
-Pingo checks that the network and saved credentials are available before disconnecting. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
+Pingo verifies the access point's BSSID and advertised security capabilities before disconnecting. It refuses same-name access points with a different identity or security configuration. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
 
 > [!NOTE]
 > macOS requires Location access to reveal Wi-Fi network names. Pingo requests this permission when Auto-Fix is enabled or when you open the backup network selector.
@@ -65,7 +65,10 @@ Open **Choose Backup Network** in Pingo's menu and select a nearby Wi-Fi network
 
 When three consecutive internet checks fail on the current network, Pingo tries the selected backup once and verifies internet access after joining it. If Auto-Fix is enabled, Pingo first reconnects the current network after the initial failed check. Pingo does not alternate repeatedly between networks during an outage or automatically switch back to the primary network.
 
-The backup must be in range and either open or have a password already saved in the macOS Keychain. When you select a protected backup, macOS may request an administrator password so Pingo can read its Wi-Fi password. Pingo keeps that password in memory for later failover and discards it when Pingo quits.
+The backup must be protected and have a password already saved in the macOS Keychain. Pingo pins the selected access point's BSSID and security capabilities, then refuses automatic failover to same-name networks that do not match. Open networks are not eligible for automatic connection because their identity cannot be authenticated. When you select a backup, macOS may request an administrator password so Pingo can read its Wi-Fi password. Pingo keeps that password in memory for later failover and discards it when Pingo quits.
+
+> [!IMPORTANT]
+> BSSID pinning reduces evil-twin and Wi-Fi Pineapple risk, but Wi-Fi identifiers can be spoofed. Protected Wi-Fi still depends on the secrecy of its password, and Pingo cannot make an untrusted network safe. At hostile venues, prefer a personal hotspot or VPN and disable macOS auto-join for unfamiliar networks.
 
 ## Install
 
@@ -91,7 +94,7 @@ Notifications use macOS's script notification channel and appear as **Script Edi
 
 Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. When you choose **Check for Updates…**, Pingo makes a single request to the GitHub Releases API; it does not check in the background. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
 
-For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and retrieves saved passwords through the system Keychain API when selecting or connecting to a protected network. The selected backup network is stored in `UserDefaults`; passwords are kept only in memory and are never persisted, logged, or transmitted by Pingo.
+For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and access-point identifiers, and retrieves saved passwords through the system Keychain API when selecting or connecting to a protected network. The selected backup network's SSID, BSSID, and security fingerprint are stored in `UserDefaults`; passwords are kept only in memory and are never persisted, logged, or transmitted by Pingo.
 
 ## Build from source
 

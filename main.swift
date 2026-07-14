@@ -412,6 +412,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private var autoFixEnabled = UserDefaults.standard.bool(forKey: "autoFixWifi")
     private var backupSSIDData = UserDefaults.standard.data(forKey: "backupSSIDData")
     private var backupSSIDName = UserDefaults.standard.string(forKey: "backupSSIDName")
+    private var backupBSSID = UserDefaults.standard.string(forKey: "backupBSSID")
+    private var backupSecurityFingerprint = UserDefaults.standard.array(forKey: "backupSecurityFingerprint")?
+        .compactMap { ($0 as? NSNumber)?.intValue }
     private var wifiPasswords: [Data: String] = [:]
 
     // Wi-Fi recovery state
@@ -439,6 +442,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         locationManager.delegate = self
+        if backupSSIDData != nil && (backupBSSID == nil || backupSecurityFingerprint == nil) {
+            disableBackupNetwork()
+        }
         if autoFixEnabled, locationManager.authorizationStatus == .notDetermined {
             locationManager.requestWhenInUseAuthorization()
         }
@@ -772,25 +778,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
     @objc private func selectBackupNetwork(_ sender: NSMenuItem) {
         guard let network = sender.representedObject as? CWNetwork,
-              let ssidData = network.ssidData else { return }
-        if !network.supportsSecurity(.none) {
-            switch Self.savedWifiPassword(for: ssidData) {
-            case .found(let password):
-                wifiPasswords[ssidData] = password
-            case .notFound:
-                notify(title: "Backup Network Not Selected",
-                       body: "No saved password is available for “\(sender.title)”. Join it once in macOS first.")
-                return
-            case .accessDenied:
-                notify(title: "Backup Network Not Selected",
-                       body: "Pingo couldn't access Wi-Fi passwords. Quit and reopen Pingo, then allow Keychain access when asked.")
-                return
-            }
+              let ssidData = network.ssidData, let bssid = network.bssid else { return }
+        guard !network.supportsSecurity(.none) else {
+            notify(title: "Backup Network Not Selected",
+                   body: "Pingo won't automatically join open Wi-Fi networks because their identity cannot be authenticated.")
+            return
+        }
+        switch Self.savedWifiPassword(for: ssidData) {
+        case .found(let password):
+            wifiPasswords[ssidData] = password
+        case .notFound:
+            notify(title: "Backup Network Not Selected",
+                   body: "No saved password is available for “\(sender.title)”. Join it once in macOS first.")
+            return
+        case .accessDenied:
+            notify(title: "Backup Network Not Selected",
+                   body: "Pingo couldn't access Wi-Fi passwords. Quit and reopen Pingo, then allow Keychain access when asked.")
+            return
         }
         backupSSIDData = ssidData
         backupSSIDName = sender.title
+        backupBSSID = bssid
+        backupSecurityFingerprint = Self.securityFingerprint(of: network)
         UserDefaults.standard.set(ssidData, forKey: "backupSSIDData")
         UserDefaults.standard.set(sender.title, forKey: "backupSSIDName")
+        UserDefaults.standard.set(bssid, forKey: "backupBSSID")
+        UserDefaults.standard.set(backupSecurityFingerprint, forKey: "backupSecurityFingerprint")
         updateBackupMenuTitle()
     }
 
@@ -800,8 +813,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
         backupSSIDData = nil
         backupSSIDName = nil
+        backupBSSID = nil
+        backupSecurityFingerprint = nil
         UserDefaults.standard.removeObject(forKey: "backupSSIDData")
         UserDefaults.standard.removeObject(forKey: "backupSSIDName")
+        UserDefaults.standard.removeObject(forKey: "backupBSSID")
+        UserDefaults.standard.removeObject(forKey: "backupSecurityFingerprint")
         updateBackupMenuTitle()
     }
 
@@ -1016,7 +1033,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     private func maybeSwitchToBackup() {
-        guard let backupSSIDData, let backupSSIDName,
+        guard let backupSSIDData, let backupSSIDName, let backupBSSID,
+              let backupSecurityFingerprint,
               !backupAttemptedThisOutage, recoveryState == .idle else { return }
         guard CWWiFiClient.shared().interface()?.ssidData() != backupSSIDData else { return }
 
@@ -1030,13 +1048,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         backupAttemptedThisOutage = true
         recoveryState = .joiningBackup
         let generation = recoveryGeneration
-           let backupPassword = wifiPasswords[backupSSIDData]
+                let backupPassword = wifiPasswords[backupSSIDData]
         notify(title: "Switching to Backup Network",
              body: "Three checks failed — trying “\(backupSSIDName)”.")
 
         DispatchQueue.global().async { [weak self] in
             let connectionError = Self.connectWifi(to: backupSSIDData, named: backupSSIDName,
-                                             savedPassword: backupPassword)
+                                                   bssid: backupBSSID,
+                                                   securityFingerprint: backupSecurityFingerprint,
+                                                   savedPassword: backupPassword)
             DispatchQueue.main.async {
                 guard let self, generation == self.recoveryGeneration else { return }
                 if let connectionError {
@@ -1062,14 +1082,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             return "The Wi-Fi interface is unavailable or powered off."
         }
         guard let ssidData = interface.ssidData(),
-              let ssid = interface.ssid(), !ssid.isEmpty else {
+              let ssid = interface.ssid(), !ssid.isEmpty,
+              let bssid = interface.bssid() else {
             return "Pingo couldn't identify the current Wi-Fi network."
         }
 
-        return connectWifi(to: ssidData, named: ssid)
+        let networks: Set<CWNetwork>
+        do {
+            networks = try interface.scanForNetworks(withSSID: ssidData)
+        } catch {
+            return "“\(ssid)” couldn't be verified: \(error.localizedDescription)"
+        }
+        guard let currentNetwork = networks.first(where: { Self.sameBSSID($0.bssid, bssid) }) else {
+            return "Pingo couldn't verify the current Wi-Fi access point."
+        }
+
+        return connectWifi(to: ssidData, named: ssid, bssid: bssid,
+                           securityFingerprint: securityFingerprint(of: currentNetwork))
     }
 
-    private static func connectWifi(to ssidData: Data, named ssid: String,
+    private static func connectWifi(to ssidData: Data, named ssid: String, bssid: String,
+                                    securityFingerprint expectedSecurity: [Int],
                                     savedPassword: String? = nil) -> String? {
         guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
             return "The Wi-Fi interface is unavailable or powered off."
@@ -1081,14 +1114,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         } catch {
             return "“\(ssid)” couldn't be found: \(error.localizedDescription)"
         }
-        guard let network = networks.max(by: { $0.rssiValue < $1.rssiValue }) else {
-            return "The Wi-Fi network “\(ssid)” is not in range."
+        guard let network = networks.first(where: { sameBSSID($0.bssid, bssid) }) else {
+            return "The trusted access point for “\(ssid)” is not in range. Pingo refused other networks using that name."
+        }
+        guard securityFingerprint(of: network) == expectedSecurity else {
+            return "The security settings for “\(ssid)” changed. Pingo refused to connect."
         }
 
         let password: String?
-        if network.supportsSecurity(.none) {
-            password = nil
-        } else if let savedPassword {
+        guard !network.supportsSecurity(.none) else {
+            return "Pingo won't automatically join open Wi-Fi networks."
+        }
+        if let savedPassword {
             password = savedPassword
         } else {
             switch savedWifiPassword(for: ssidData) {
@@ -1105,10 +1142,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         Thread.sleep(forTimeInterval: 1)
         do {
             try interface.associate(to: network, password: password)
+            guard sameBSSID(interface.bssid(), bssid) else {
+                interface.disassociate()
+                return "Pingo joined an unexpected access point for “\(ssid)” and disconnected immediately."
+            }
             return nil
         } catch {
             return "Could not rejoin “\(ssid)”: \(error.localizedDescription)"
         }
+    }
+
+    private static func securityFingerprint(of network: CWNetwork) -> [Int] {
+        (0...15).compactMap { rawValue in
+            guard let security = CWSecurity(rawValue: rawValue) else { return nil }
+            return network.supportsSecurity(security) ? rawValue : nil
+        }
+    }
+
+    private static func sameBSSID(_ first: String?, _ second: String) -> Bool {
+        first?.caseInsensitiveCompare(second) == .orderedSame
     }
 
     private static func savedWifiPassword(for ssidData: Data) -> WiFiPasswordLookup {
