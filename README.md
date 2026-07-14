@@ -17,6 +17,12 @@
 
 ---
 
+![Pingo's connection monitor menu in light and dark mode](assets/pingo-readme-preview.png)
+
+<div align="center">
+  <sub>Connection status, recent checks, session health, and recovery controls — all one click away.</sub>
+</div>
+
 Pingo lives quietly in the menu bar with no Dock icon and no main window. It checks two independent public DNS endpoints and changes state only when both stop responding, helping avoid false alarms caused by a single provider.
 
 ## At a glance
@@ -105,6 +111,8 @@ Pingo intentionally keeps its implementation small. The complete app lives in [m
 | `assets/pingo.png` | Original Pingo artwork |
 | `assets/pingo-app-icon.png` | Rendered macOS app icon master |
 | `assets/render-app-icon.swift` | Icon renderer |
+| `assets/pingo-readme-preview.png` | Light and dark README product preview |
+| `assets/render-readme-preview.swift` | README product preview renderer |
 | `assets/Pingo.icns` | macOS icon bundle |
 
 ## Test an outage
