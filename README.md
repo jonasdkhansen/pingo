@@ -72,11 +72,24 @@ The backup must be protected and have a password already saved in the macOS Keyc
 
 ## Install
 
-1. Download the latest macOS archive from [GitHub Releases](https://github.com/jonasdkhansen/pingo/releases/latest).
-2. Extract the archive and move `Pingo.app` to your Applications folder.
-3. Open Pingo. Its antenna indicator will appear in the menu bar.
+The easiest free installation method is [Homebrew](https://brew.sh/). Homebrew builds Pingo locally, so macOS does not treat it as an untrusted downloaded app:
 
-Pingo is ad-hoc signed and is not Apple-notarized. On first launch, macOS may show **“Pingo” Not Opened** with only **Done** and **Move to Bin**. Moving the app to Applications does not remove this warning. Open Terminal and run:
+```sh
+brew tap jonasdkhansen/pingo https://github.com/jonasdkhansen/pingo
+brew install pingo
+pingo
+```
+
+Use `pingo` whenever you want to launch the app. To update it:
+
+```sh
+brew update
+brew upgrade pingo
+```
+
+Alternatively, download the latest macOS archive from [GitHub Releases](https://github.com/jonasdkhansen/pingo/releases/latest), extract it, and move `Pingo.app` to Applications. The release is ad-hoc signed and is not Apple-notarized, so macOS may show **“Pingo” Not Opened** with only **Done** and **Move to Bin**. To approve it without Terminal, try opening Pingo once, then go to **System Settings > Privacy & Security**, scroll to **Security**, and choose **Open Anyway**.
+
+If **Open Anyway** is unavailable, open Terminal and run:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Pingo.app
@@ -139,6 +152,7 @@ Pingo intentionally keeps its implementation small. The complete app lives in [m
 | `main.swift` | Complete Swift and AppKit application |
 | `Info.plist` | Bundle metadata, version, permissions, and menu bar app configuration |
 | `build.sh` | Icon rendering, compilation, app assembly, and signing |
+| `Formula/pingo.rb` | Homebrew source-build formula and launcher |
 | `assets/pingo.png` | Original Pingo artwork |
 | `assets/pingo-app-icon.png` | Rendered macOS app icon master |
 | `assets/render-app-icon.swift` | Icon renderer |
