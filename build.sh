@@ -4,6 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 APP="Pingo.app"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 ICON_SOURCE="assets/pingo.png"
 ICON_MASTER="assets/pingo-app-icon.png"
 ICON_OUTPUT="assets/Pingo.icns"
@@ -11,6 +12,11 @@ ICON_RENDERER="assets/render-app-icon.swift"
 TEMP_DIR="$(mktemp -d)"
 ICONSET="$TEMP_DIR/Pingo.iconset"
 trap 'rm -rf "$TEMP_DIR"' EXIT
+
+if pgrep -x Pingo >/dev/null; then
+	print -u2 "Pingo is running. Quit it before rebuilding so macOS can validate the app signature."
+	exit 1
+fi
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ICONSET"
@@ -28,5 +34,5 @@ iconutil -c icns "$ICONSET" -o "$ICON_OUTPUT"
 cp "$ICON_OUTPUT" "$APP/Contents/Resources/Pingo.icns"
 
 swiftc -O -o "$APP/Contents/MacOS/Pingo" main.swift
-codesign --force --sign - "$APP"
+codesign --force --sign "$SIGNING_IDENTITY" "$APP"
 echo "Built $APP — launch with: open $APP"

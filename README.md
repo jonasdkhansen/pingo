@@ -64,7 +64,7 @@ Open **Choose Backup Network** in Pingo's menu and select a nearby Wi-Fi network
 
 When three consecutive internet checks fail on the current network, Pingo tries the selected backup once and verifies internet access after joining it. If Auto-Fix is enabled, Pingo first reconnects the current network after the initial failed check. Pingo does not alternate repeatedly between networks during an outage or automatically switch back to the primary network.
 
-The backup must be in range and either open or have a password already saved in the macOS Keychain. Pingo stores the selected network name, but retrieves its password from Keychain only when it needs to connect.
+The backup must be in range and either open or have a password already saved in the macOS Keychain. When you select a protected backup, macOS may request an administrator password so Pingo can read its Wi-Fi password. Pingo keeps that password in memory for later failover and discards it when Pingo quits.
 
 ## Install
 
@@ -73,6 +73,10 @@ The backup must be in range and either open or have a password already saved in 
 3. Open Pingo. Its antenna indicator will appear in the menu bar.
 
 Pingo is ad-hoc signed. On first launch, macOS may ask you to approve it under **System Settings > Privacy & Security**.
+
+### Update
+
+Choose **Check for Updates…** in Pingo's menu. If a newer version is available, Pingo opens its GitHub release so you can download it. Quit Pingo, extract the archive, and replace the existing app in your Applications folder. Your saved settings are kept when the app is replaced.
 
 ### Start at login
 
@@ -84,7 +88,7 @@ Notifications use macOS's script notification channel and appear as **Script Edi
 
 ## Privacy
 
-Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
+Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. When you choose **Check for Updates…**, Pingo makes a single request to the GitHub Releases API; it does not check in the background. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
 
 For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and retrieves saved passwords through the system Keychain API when connecting. The selected backup network is stored in `UserDefaults`; passwords are never persisted, logged, or transmitted by Pingo.
 
@@ -101,6 +105,13 @@ open Pingo.app
 ```
 
 The build script renders the app icon, compiles the Swift source, assembles the app bundle, and applies an ad-hoc signature.
+Quit Pingo before rebuilding it; replacing the bundle while it is running prevents macOS from authorizing Keychain access.
+
+For a distributable build, install an Apple Developer certificate and pass its identity so Keychain authorization remains stable across launches:
+
+```sh
+SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build.sh
+```
 
 ## Customize
 

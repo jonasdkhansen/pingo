@@ -14,6 +14,20 @@ private enum WiFiRecoveryState {
     case idle, reconnectingPrimary, joiningBackup
 }
 
+private enum WiFiPasswordLookup {
+    case found(String), notFound, accessDenied
+}
+
+private struct GitHubRelease: Decodable {
+    let tagName: String
+    let htmlURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+    }
+}
+
 private let timeFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "HH:mm:ss"
@@ -398,6 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private var autoFixEnabled = UserDefaults.standard.bool(forKey: "autoFixWifi")
     private var backupSSIDData = UserDefaults.standard.data(forKey: "backupSSIDData")
     private var backupSSIDName = UserDefaults.standard.string(forKey: "backupSSIDName")
+    private var wifiPasswords: [Data: String] = [:]
 
     // Wi-Fi recovery state
     private var recoveryState = WiFiRecoveryState.idle
@@ -465,6 +480,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         menu.addItem(makeIntervalSliderItem())
         menu.addItem(.separator())
 
+        let updateRow = MenuRow(
+            title: "Check for Updates…",
+            helpText: "Check GitHub Releases for a newer version of Pingo. Pingo only contacts GitHub when you choose this action.",
+            symbol: "arrow.down.circle",
+            target: self, action: #selector(checkForUpdates))
+        menu.addItem(rowItem(updateRow))
+
         let quitRow = MenuRow(
             title: "Quit Pingo",
             helpText: "Quit Pingo completely. Monitoring stops until you open it again.",
@@ -477,6 +499,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
         refreshUI()
         applyMonitoringState(initial: true)
+    }
+
+    @objc private func checkForUpdates() {
+        var request = URLRequest(url: URL(string: "https://api.github.com/repos/jonasdkhansen/pingo/releases/latest")!)
+        let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        request.setValue("Pingo/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let result: Result<GitHubRelease, Error>
+            do {
+                if let error { throw error }
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode), let data else {
+                    throw URLError(.badServerResponse)
+                }
+                result = .success(try JSONDecoder().decode(GitHubRelease.self, from: data))
+            } catch {
+                result = .failure(error)
+            }
+
+            DispatchQueue.main.async { self.presentUpdateResult(result) }
+        }.resume()
+    }
+
+    private func presentUpdateResult(_ result: Result<GitHubRelease, Error>) {
+        let alert = NSAlert()
+        switch result {
+        case .success(let release):
+            let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+            let latestVersion = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+            if latestVersion.compare(currentVersion, options: .numeric) == .orderedDescending {
+                alert.messageText = "Pingo \(latestVersion) is available"
+                alert.informativeText = "You have Pingo \(currentVersion). Download the update, quit Pingo, then replace it in your Applications folder."
+                alert.addButton(withTitle: "Open Release")
+                alert.addButton(withTitle: "Later")
+                if alert.runModal() == .alertFirstButtonReturn {
+                    NSWorkspace.shared.open(release.htmlURL)
+                }
+            } else {
+                alert.messageText = "Pingo is up to date"
+                alert.informativeText = "You’re using the latest version, Pingo \(currentVersion)."
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+        case .failure:
+            alert.messageText = "Unable to check for updates"
+            alert.informativeText = "Pingo couldn’t reach GitHub Releases. Check your internet connection and try again."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     private func viewItem(_ view: NSView) -> NSMenuItem {
@@ -701,10 +773,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     @objc private func selectBackupNetwork(_ sender: NSMenuItem) {
         guard let network = sender.representedObject as? CWNetwork,
               let ssidData = network.ssidData else { return }
-        if !network.supportsSecurity(.none), Self.savedWifiPassword(for: ssidData) == nil {
-            notify(title: "Backup Network Not Selected",
-                   body: "No saved password is available for “\(sender.title)”. Join it once in macOS first.")
-            return
+        if !network.supportsSecurity(.none) {
+            switch Self.savedWifiPassword(for: ssidData) {
+            case .found(let password):
+                wifiPasswords[ssidData] = password
+            case .notFound:
+                notify(title: "Backup Network Not Selected",
+                       body: "No saved password is available for “\(sender.title)”. Join it once in macOS first.")
+                return
+            case .accessDenied:
+                notify(title: "Backup Network Not Selected",
+                       body: "Pingo couldn't access Wi-Fi passwords. Quit and reopen Pingo, then allow Keychain access when asked.")
+                return
+            }
         }
         backupSSIDData = ssidData
         backupSSIDName = sender.title
@@ -714,6 +795,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     @objc private func disableBackupNetwork() {
+        if let backupSSIDData {
+            wifiPasswords.removeValue(forKey: backupSSIDData)
+        }
         backupSSIDData = nil
         backupSSIDName = nil
         UserDefaults.standard.removeObject(forKey: "backupSSIDData")
@@ -946,11 +1030,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         backupAttemptedThisOutage = true
         recoveryState = .joiningBackup
         let generation = recoveryGeneration
+           let backupPassword = wifiPasswords[backupSSIDData]
         notify(title: "Switching to Backup Network",
              body: "Three checks failed — trying “\(backupSSIDName)”.")
 
         DispatchQueue.global().async { [weak self] in
-            let connectionError = Self.connectWifi(to: backupSSIDData, named: backupSSIDName)
+            let connectionError = Self.connectWifi(to: backupSSIDData, named: backupSSIDName,
+                                             savedPassword: backupPassword)
             DispatchQueue.main.async {
                 guard let self, generation == self.recoveryGeneration else { return }
                 if let connectionError {
@@ -983,7 +1069,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         return connectWifi(to: ssidData, named: ssid)
     }
 
-    private static func connectWifi(to ssidData: Data, named ssid: String) -> String? {
+    private static func connectWifi(to ssidData: Data, named ssid: String,
+                                    savedPassword: String? = nil) -> String? {
         guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
             return "The Wi-Fi interface is unavailable or powered off."
         }
@@ -1001,11 +1088,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         let password: String?
         if network.supportsSecurity(.none) {
             password = nil
-        } else {
-            guard let savedPassword = savedWifiPassword(for: ssidData) else {
-                return "No saved password is available for “\(ssid)”."
-            }
+        } else if let savedPassword {
             password = savedPassword
+        } else {
+            switch savedWifiPassword(for: ssidData) {
+            case .found(let savedPassword):
+                password = savedPassword
+            case .notFound:
+                return "No saved password is available for “\(ssid)”."
+            case .accessDenied:
+                return "Pingo couldn't access Wi-Fi passwords. Quit and reopen Pingo, then allow Keychain access when asked."
+            }
         }
 
         interface.disassociate()
@@ -1018,18 +1111,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
     }
 
-    private static func savedWifiPassword(for ssidData: Data) -> String? {
+    private static func savedWifiPassword(for ssidData: Data) -> WiFiPasswordLookup {
         var password: NSString?
         if CWKeychainFindWiFiPassword(.user, ssidData, &password) == errSecSuccess,
            let password {
-            return password as String
+            return .found(password as String)
         }
         password = nil
-        if CWKeychainFindWiFiPassword(.system, ssidData, &password) == errSecSuccess,
-           let password {
-            return password as String
+        let systemStatus = CWKeychainFindWiFiPassword(.system, ssidData, &password)
+        if systemStatus == errSecSuccess, let password {
+            return .found(password as String)
         }
-        return nil
+        return systemStatus == errSecItemNotFound ? .notFound : .accessDenied
     }
 
     // MARK: - Icon & notifications
