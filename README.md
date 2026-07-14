@@ -1,7 +1,7 @@
 # Pingo 🐧
 
 <p align="center">
-  <img src="assets/pingo.png" width="240" alt="Pingo the network operations penguin monitoring a terminal">
+  <img src="assets/pingo-app-icon.png" width="240" alt="Pingo the network operations penguin monitoring a terminal">
 </p>
 
 **Pingo** is a tiny macOS menu bar app that watches your internet connection and tells you the moment it drops — and when it comes back.
@@ -72,6 +72,8 @@ After changing anything, rebuild and relaunch:
 | `Info.plist` | App metadata; `LSUIElement` hides the Dock icon |
 | `build.sh` | Generates the app icon, compiles, and ad-hoc signs `Pingo.app` |
 | `assets/pingo.png` | Original Pingo mascot artwork |
+| `assets/pingo-app-icon.png` | Generated modern macOS icon master |
+| `assets/render-app-icon.swift` | Applies the squircle and glass treatment |
 | `assets/Pingo.icns` | Generated macOS app icon |
 
 ## Testing it
