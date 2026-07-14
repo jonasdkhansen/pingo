@@ -1,81 +1,112 @@
-# Pingo 🐧
+<!-- markdownlint-disable MD023 MD033 MD041 -->
+<div align="center">
+  <img src="assets/pingo-app-icon.png" width="220" alt="Pingo app icon">
 
-<p align="center">
-  <img src="assets/pingo-app-icon.png" width="240" alt="Pingo the network operations penguin monitoring a terminal">
-</p>
+  # Pingo
 
-**Pingo** is a tiny macOS menu bar app that watches your internet connection and tells you the moment it drops — and when it comes back.
+  **A tiny network monitor for your Mac menu bar.**
 
-Built for unstable wifi: instead of wondering why a page won't load, you get a notification and a red icon in the menu bar.
+  Know when your connection drops, when it returns, and how it has behaved at a glance.
+
+  [![macOS 11+](https://img.shields.io/badge/macOS-11%2B-111111?style=flat-square&logo=apple&logoColor=white)](https://github.com/jonasdkhansen/pingo/releases/latest)
+  [![Swift](https://img.shields.io/badge/Swift-AppKit-F05138?style=flat-square&logo=swift&logoColor=white)](main.swift)
+  [![Latest release](https://img.shields.io/github/v/release/jonasdkhansen/pingo?style=flat-square&color=2ea44f)](https://github.com/jonasdkhansen/pingo/releases/latest)
+
+  [**Download Pingo for macOS**](https://github.com/jonasdkhansen/pingo/releases/download/v1.1.0/Pingo-1.1.0-macos.zip)
+</div>
+
+---
+
+Pingo lives quietly in the menu bar with no Dock icon and no main window. It checks two independent public DNS endpoints and changes state only when both stop responding, helping avoid false alarms caused by a single provider.
+
+## At a glance
+
+| | |
+| --- | --- |
+| **Instant status** | A green or red menu bar indicator shows whether the internet is responding. |
+| **Native alerts** | Get notified when the connection drops and when it returns, including the outage duration. |
+| **Live history** | See session uptime, total checks, failures, and recent connection results. |
+| **Auto-Fix Wi-Fi** | Reconnect the active network without turning the Wi-Fi radio off. |
+| **Flexible checks** | Choose any interval from 1 to 60 seconds or run an immediate check. |
+| **Built for macOS** | A lightweight Swift and AppKit app with native controls, SF Symbols, and no runtime dependencies. |
 
 ## How it works
 
-- Pings `1.1.1.1` (Cloudflare) and `8.8.8.8` (Google) at a configurable interval (default **15 seconds**) with a single packet and a 3-second timeout. You're counted as online if **either** replies, so one provider's blip won't trigger a false "down" alert.
-- **Connection lost:** the menu bar antenna icon turns red with a slash, and a notification (with sound) appears.
-- **Connection restored:** another notification tells you how long the outage lasted (e.g. "Back after 2m 40s").
+Pingo sends one packet to both `1.1.1.1` (Cloudflare) and `8.8.8.8` (Google) with a three-second timeout. If either endpoint replies, the connection is considered online.
 
-Clicking the menu bar icon opens a small dashboard:
+When the connection changes state, Pingo responds immediately:
 
-- A **status header** — a colored badge and verdict ("Connected" / "No Internet"), with the last check time or how long the connection has been down.
-- **Stat tiles** — uptime percentage, total pings, and failure count for this session.
-- A **history bar** — the most recent checks as green/red bars (newest on the right), so a flaky connection is visible at a glance.
-- **Pause/Resume Monitoring** — stops pinging entirely; the icon dims to show monitoring is off.
-- **Check Now** — runs an immediate one-off check (works even while paused).
-- **Auto-Fix Wi-Fi** — off by default. When enabled, if the internet stops answering Pingo remembers the active Wi-Fi network, disconnects it, and explicitly rejoins that same network without turning the Wi-Fi radio off, then re-checks a few seconds later. macOS requires Location access to read the current network name. To avoid fighting a real outage, Pingo won't reconnect more than once per minute.
-- A **check interval** slider (1–60 seconds) to control how often Pingo pings. The interval and pause state are remembered across restarts.
+- **Connection lost:** the antenna turns red and a notification appears.
+- **Connection restored:** the indicator returns to green and the notification includes how long the outage lasted.
+- **Monitoring paused:** checks stop completely and the menu bar icon dims.
 
-Every section has a small **?** button — click it for a popup explaining what that feature does.
+Open Pingo from the menu bar to see the current status, recent history, session statistics, check interval, and quick controls. Settings persist across launches.
 
-Pingo is menu-bar-only — no Dock icon, no window.
+## Auto-Fix Wi-Fi
 
-## Building
+Auto-Fix is optional and disabled by default. When enabled, Pingo remembers the active Wi-Fi network, disconnects from it, and explicitly rejoins the same network. The Wi-Fi radio stays powered on throughout the process.
 
-Requires Xcode Command Line Tools (`xcode-select --install`).
+Pingo checks that the network and saved credentials are available before disconnecting. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
 
-```sh
-./build.sh
-```
+> [!NOTE]
+> macOS requires Location access to reveal the current Wi-Fi network name. Pingo requests this permission only when Auto-Fix is enabled and uses the network name only to reconnect that same network.
 
-This generates the mascot app icon, compiles `main.swift`, and ad-hoc signs `Pingo.app` in the project folder.
+## Install
 
-## Running
+1. Download [Pingo-1.1.0-macos.zip](https://github.com/jonasdkhansen/pingo/releases/download/v1.1.0/Pingo-1.1.0-macos.zip).
+2. Extract the archive and move `Pingo.app` to your Applications folder.
+3. Open Pingo. Its antenna indicator will appear in the menu bar.
 
-```sh
-open Pingo.app
-```
+Pingo is ad-hoc signed. On first launch, macOS may ask you to approve it under **System Settings > Privacy & Security**.
 
 ### Start at login
 
-System Settings → General → Login Items → "+" → select `Pingo.app` from this folder.
+Open **System Settings > General > Login Items**, select **+**, and add `Pingo.app`.
 
 ### Notifications
 
-Notifications are delivered through macOS's script notification channel, which appears as **Script Editor** in System Settings → Notifications. If you don't see popups, make sure notifications are allowed there (choose "Alerts" if you want them to stay on screen until dismissed).
+Notifications use macOS's script notification channel and appear as **Script Editor** under **System Settings > Notifications**. Allow notifications there if Pingo alerts are not visible.
 
-## Configuration
+## Build from source
 
-The check interval and pause state are set from the menu itself and persisted (via `UserDefaults`).
-
-For anything else, the code lives in [main.swift](main.swift): `pingHosts` at the top changes the ping targets (add or remove hosts — down is only reported when they all fail), and the menu bar icons are SF Symbols set in `setIcon(state:)` — swap in any other symbol names if you want a different look.
-
-After changing anything, rebuild and relaunch:
+You need macOS 11 or newer and Xcode Command Line Tools:
 
 ```sh
-./build.sh && open Pingo.app
+xcode-select --install
+git clone https://github.com/jonasdkhansen/pingo.git
+cd pingo
+./build.sh
+open Pingo.app
 ```
 
-## Files
+The build script renders the app icon, compiles the Swift source, assembles the app bundle, and applies an ad-hoc signature.
 
-| File | Purpose |
-|------|---------|
-| `main.swift` | The entire app (Swift + AppKit) |
-| `Info.plist` | App metadata; `LSUIElement` hides the Dock icon |
-| `build.sh` | Generates the app icon, compiles, and ad-hoc signs `Pingo.app` |
-| `assets/pingo.png` | Original Pingo mascot artwork |
-| `assets/pingo-app-icon.png` | Generated modern macOS icon master |
-| `assets/render-app-icon.swift` | Applies the squircle and glass treatment |
-| `assets/Pingo.icns` | Generated macOS app icon |
+## Customize
 
-## Testing it
+Pingo intentionally keeps its implementation small. The complete app lives in [main.swift](main.swift).
 
-Turn wifi off for ~20 seconds: you should get the "Internet is down" alert, then "Internet is back" once you re-enable it.
+- Edit `pingHosts` to change the endpoints. Pingo reports an outage only when every configured host fails.
+- Edit `setIcon(state:)` to use different SF Symbols in the menu bar.
+- Run `./build.sh && open Pingo.app` after making changes.
+
+## Project layout
+
+| Path | Purpose |
+| --- | --- |
+| `main.swift` | Complete Swift and AppKit application |
+| `Info.plist` | Bundle metadata, version, permissions, and menu bar app configuration |
+| `build.sh` | Icon rendering, compilation, app assembly, and signing |
+| `assets/pingo.png` | Original Pingo artwork |
+| `assets/pingo-app-icon.png` | Rendered macOS app icon master |
+| `assets/render-app-icon.swift` | Icon renderer |
+| `assets/Pingo.icns` | macOS icon bundle |
+
+## Test an outage
+
+Turn Wi-Fi off for about 20 seconds. Pingo should report that the internet is down, then show a recovery notification after Wi-Fi is restored.
+
+---
+
+<div align="center">
+  <sub>Small, native, and focused on one job.</sub>
+</div>
