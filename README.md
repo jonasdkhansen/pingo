@@ -76,7 +76,8 @@ The easiest free installation method is [Homebrew](https://brew.sh/). Homebrew b
 
 ```sh
 brew tap jonasdkhansen/pingo https://github.com/jonasdkhansen/pingo
-brew install pingo
+brew trust --formula jonasdkhansen/pingo/pingo
+brew install jonasdkhansen/pingo/pingo
 pingo
 ```
 
