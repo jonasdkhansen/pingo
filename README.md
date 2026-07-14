@@ -17,10 +17,10 @@
 
 ---
 
-![Pingo's connection monitor menu in light and dark mode](assets/pingo-readme-preview.png)
+![Pingo's connection monitor, Wi-Fi recovery, and update controls in light and dark mode](assets/pingo-readme-preview.png)
 
 <div align="center">
-  <sub>Connection status, recent checks, session health, and recovery controls — all one click away.</sub>
+  <sub>Connection status, recent checks, Wi-Fi recovery, and manual update checks — all one click away.</sub>
 </div>
 
 Pingo lives quietly in the menu bar with no Dock icon and no main window. It checks two independent public DNS endpoints and changes state only when both stop responding, helping avoid false alarms caused by a single provider.
@@ -34,6 +34,7 @@ Pingo lives quietly in the menu bar with no Dock icon and no main window. It che
 | **Live history** | See session uptime, total checks, failures, and recent connection results. |
 | **Auto-Fix Wi-Fi** | Reconnect the active network without turning the Wi-Fi radio off. |
 | **Backup network** | Switch once to a selected Wi-Fi network after three consecutive failed checks. |
+| **Update checks** | Check GitHub Releases for a newer version only when you request it. |
 | **Flexible checks** | Choose any interval from 1 to 60 seconds or run an immediate check. |
 | **Built for macOS** | A lightweight Swift and AppKit app with native controls, SF Symbols, and no runtime dependencies. |
 

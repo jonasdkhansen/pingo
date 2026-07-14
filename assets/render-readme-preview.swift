@@ -1,7 +1,7 @@
 import AppKit
 
 let canvasWidth = 1440
-let canvasHeight = 780
+let canvasHeight = 840
 let outputPath = CommandLine.arguments.dropFirst().first ?? "assets/pingo-readme-preview.png"
 
 func color(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
@@ -61,7 +61,7 @@ func drawSeparator(x: CGFloat, top: CGFloat, width: CGFloat, color: NSColor) {
 
 func drawMenu(x: CGFloat, top: CGFloat, dark: Bool) {
     let width: CGFloat = 420
-    let height: CGFloat = 600
+    let height: CGFloat = 642
     let foreground = dark ? color(0xf4f4f5) : color(0x202124)
     let secondary = dark ? color(0xa9abb0) : color(0x686b70)
     let divider = dark ? color(0xffffff, alpha: 0.11) : color(0x000000, alpha: 0.10)
@@ -164,7 +164,8 @@ func drawMenu(x: CGFloat, top: CGFloat, dark: Bool) {
          color: dark ? color(0xe4e5e7) : .white, radius: 8)
 
     drawSeparator(x: x, top: top + 524, width: width, color: divider)
-    drawRow(top + 540, icon: "power", label: "Quit Pingo")
+    drawRow(top + 540, icon: "arrow.down.circle", label: "Check for Updates…")
+    drawRow(top + 582, icon: "power", label: "Quit Pingo")
 
     text(dark ? "DARK" : "LIGHT", x: x, top: top + height + 25, width: width, height: 18,
          font: .systemFont(ofSize: 12, weight: .semibold),
@@ -197,8 +198,8 @@ context.imageInterpolation = .high
 fill(rect(0, 0, CGFloat(canvasWidth) / 2, CGFloat(canvasHeight)), color: color(0xe9edf2))
 fill(rect(CGFloat(canvasWidth) / 2, 0, CGFloat(canvasWidth) / 2, CGFloat(canvasHeight)), color: color(0x181a1f))
 
-drawMenu(x: 190, top: 50, dark: false)
-drawMenu(x: 830, top: 50, dark: true)
+drawMenu(x: 190, top: 40, dark: false)
+drawMenu(x: 830, top: 40, dark: true)
 
 context.flushGraphics()
 NSGraphicsContext.restoreGraphicsState()
