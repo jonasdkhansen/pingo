@@ -5,7 +5,9 @@ cd "$(dirname "$0")"
 
 APP="Pingo.app"
 ICON_SOURCE="assets/pingo.png"
+ICON_MASTER="assets/pingo-app-icon.png"
 ICON_OUTPUT="assets/Pingo.icns"
+ICON_RENDERER="assets/render-app-icon.swift"
 TEMP_DIR="$(mktemp -d)"
 ICONSET="$TEMP_DIR/Pingo.iconset"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -14,11 +16,12 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ICONSET"
 cp Info.plist "$APP/Contents/Info.plist"
 
+swift "$ICON_RENDERER" "$ICON_SOURCE" "$ICON_MASTER"
 for icon_size in 16 32 128 256 512; do
 	retina_size=$((icon_size * 2))
-	sips -z "$icon_size" "$icon_size" "$ICON_SOURCE" \
+	sips -z "$icon_size" "$icon_size" "$ICON_MASTER" \
 		--out "$ICONSET/icon_${icon_size}x${icon_size}.png" >/dev/null
-	sips -z "$retina_size" "$retina_size" "$ICON_SOURCE" \
+	sips -z "$retina_size" "$retina_size" "$ICON_MASTER" \
 		--out "$ICONSET/icon_${icon_size}x${icon_size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$ICON_OUTPUT"
