@@ -1,0 +1,6 @@
+# Build output
+Pingo.app/
+*.app/
+
+# macOS
+.DS_Store

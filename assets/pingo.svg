@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="320" height="320" role="img" aria-labelledby="title description">
+  <title id="title">Pingo network operations mark</title>
+  <desc id="description">A modern geometric penguin operator seated at a network console with live ping telemetry.</desc>
+  <defs>
+    <linearGradient id="shell" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#26343a"/>
+      <stop offset="1" stop-color="#10191d"/>
+    </linearGradient>
+    <linearGradient id="plumage" x1="0" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#202c31"/>
+      <stop offset="1" stop-color="#080e11"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#142b32"/>
+      <stop offset="1" stop-color="#09161b"/>
+    </linearGradient>
+    <clipPath id="frameClip">
+      <rect x="16" y="16" width="288" height="288" rx="52"/>
+    </clipPath>
+  </defs>
+
+  <rect x="16" y="16" width="288" height="288" rx="52" fill="url(#shell)"/>
+  <g clip-path="url(#frameClip)">
+    <path d="M16 244 L304 181 V304 H16 Z" fill="#17252a"/>
+    <path d="M16 267 L304 204" stroke="#314248" stroke-width="2" opacity="0.5"/>
+
+    <!-- Recessed network operations display. -->
+    <rect x="130" y="42" width="148" height="112" rx="8" fill="#080f12" stroke="#43545a" stroke-width="3"/>
+    <rect x="140" y="52" width="128" height="92" rx="3" fill="url(#screen)"/>
+    <path d="M140 75 H268 M171 52 V144 M204 52 V144 M236 52 V144" stroke="#2a444c" stroke-width="1" opacity="0.45"/>
+    <text x="150" y="68" font-family="Menlo,Consolas,monospace" font-size="9" font-weight="700" fill="#94a9ae">OPS / EDGE</text>
+    <circle cx="255" cy="65" r="4" fill="#42cdbd"/>
+    <path d="M149 120 L167 111 L184 116 L202 90 L220 102 L239 82 L259 94" fill="none" stroke="#42cdbd" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter"/>
+    <g fill="#42cdbd">
+      <rect x="146" y="117" width="6" height="6"/>
+      <rect x="164" y="108" width="6" height="6"/>
+      <rect x="181" y="113" width="6" height="6"/>
+      <rect x="199" y="87" width="6" height="6"/>
+      <rect x="217" y="99" width="6" height="6"/>
+      <rect x="236" y="79" width="6" height="6"/>
+      <rect x="256" y="91" width="6" height="6"/>
+    </g>
+    <g font-family="Menlo,Consolas,monospace" font-size="8" font-weight="700">
+      <text x="149" y="137" fill="#71878c">PING</text>
+      <text x="176" y="137" fill="#42cdbd">12ms</text>
+      <text x="223" y="137" fill="#71878c">UP</text>
+      <text x="241" y="137" fill="#42cdbd">100</text>
+    </g>
+    <path d="M194 155 V169 M178 170 H210" fill="none" stroke="#43545a" stroke-width="5" stroke-linecap="square"/>
+
+    <!-- Low-profile task chair. -->
+    <path d="M41 177 Q41 165 53 165 H102 Q114 165 114 177 V250 H41 Z" fill="#111d21" stroke="#34474d" stroke-width="4"/>
+    <path d="M53 176 H102 V241 H53 Z" fill="#1b2b30"/>
+    <path d="M53 250 V284 M103 250 V284" stroke="#34474d" stroke-width="5"/>
+
+    <!-- Natural, side-facing penguin silhouette. -->
+    <path d="M45 231 C45 192 54 159 76 148 C98 137 119 151 125 180 C130 204 128 245 115 270 C104 291 77 293 59 275 C48 263 45 249 45 231 Z" fill="url(#plumage)" stroke="#060a0c" stroke-width="5"/>
+    <path d="M61 226 C61 190 69 170 84 166 C101 162 113 180 114 215 C115 246 107 270 91 277 C74 272 61 257 61 226 Z" fill="#d9ddda"/>
+
+    <path d="M49 134 C49 98 64 73 88 69 C108 66 126 78 134 101 C140 119 136 141 124 157 C112 172 91 177 73 168 C58 161 49 149 49 134 Z" fill="url(#plumage)" stroke="#060a0c" stroke-width="5"/>
+    <path d="M70 105 C79 90 95 84 110 91 C122 97 128 111 125 128 C122 143 110 154 95 156 C82 156 71 149 66 138 C61 127 63 116 70 105 Z" fill="#e2e5e1"/>
+    <path d="M92 88 C106 84 121 93 127 108 C116 102 106 101 95 106 C87 110 80 117 76 126 C73 111 79 97 92 88 Z" fill="#111b1f"/>
+    <circle cx="104" cy="119" r="4" fill="#0b1114"/>
+    <circle cx="105" cy="118" r="1.2" fill="#e8efed"/>
+    <path d="M120 130 L143 137 L120 145 Z" fill="#d88b2b" stroke="#8d541b" stroke-width="2" stroke-linejoin="miter"/>
+
+    <!-- Industrial headset, kept subordinate to the silhouette. -->
+    <path d="M54 133 Q48 82 89 70 Q126 72 135 108" fill="none" stroke="#52656b" stroke-width="6"/>
+    <rect x="43" y="119" width="18" height="34" rx="5" fill="#324c54" stroke="#0b1215" stroke-width="4"/>
+    <rect x="126" y="105" width="18" height="34" rx="5" fill="#324c54" stroke="#0b1215" stroke-width="4"/>
+    <path d="M137 136 Q135 153 119 159" fill="none" stroke="#52656b" stroke-width="4"/>
+    <circle cx="116" cy="160" r="4" fill="#42cdbd"/>
+
+    <!-- Console and laptop remain separate from the operator silhouette. -->
+    <path d="M26 253 H294" stroke="#060a0c" stroke-width="8"/>
+    <path d="M153 177 H280 L271 242 H162 Z" fill="#0a1114" stroke="#455a60" stroke-width="4" stroke-linejoin="miter"/>
+    <path d="M164 188 H268 L262 231 H170 Z" fill="url(#screen)"/>
+    <path d="M176 202 H212 M176 212 H238 M176 222 H226" stroke="#71878c" stroke-width="3" opacity="0.75"/>
+    <path d="M176 202 H194 M176 212 H222 M176 222 H208" stroke="#42cdbd" stroke-width="3"/>
+    <circle cx="249" cy="218" r="5" fill="#42cdbd"/>
+    <path d="M148 242 H278 L292 254 H136 Z" fill="#2a3d43" stroke="#070d10" stroke-width="5" stroke-linejoin="miter"/>
+    <path d="M195 248 H232" stroke="#71878c" stroke-width="3"/>
+    <g fill="#42cdbd">
+      <rect x="158" y="247" width="5" height="5"/>
+      <rect x="168" y="247" width="5" height="5"/>
+      <rect x="260" y="247" width="5" height="5"/>
+      <rect x="270" y="247" width="5" height="5"/>
+    </g>
+
+    <!-- One flipper reaches the keyboard plane, never the screen. -->
+    <path d="M113 189 C129 202 142 222 157 244 L177 244 C163 216 147 191 125 179 Z" fill="#121f24" stroke="#060a0c" stroke-width="5" stroke-linejoin="miter"/>
+    <path d="M164 239 C174 236 182 241 184 247 C178 254 164 256 155 250 C155 245 158 242 164 239 Z" fill="#121f24" stroke="#060a0c" stroke-width="4"/>
+
+    <path d="M56 282 L75 269 L88 283" fill="none" stroke="#b77325" stroke-width="7" stroke-linejoin="miter"/>
+    <path d="M88 283 L103 270 L119 282" fill="none" stroke="#b77325" stroke-width="7" stroke-linejoin="miter"/>
+  </g>
+
+  <rect x="16" y="16" width="288" height="288" rx="52" fill="none" stroke="#526168" stroke-width="2" opacity="0.45"/>
+</svg>
