@@ -21,9 +21,9 @@
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>NSLocationUsageDescription</key>
-    <string>Pingo uses the current Wi-Fi network name only to reconnect that same network when Auto-Fix is enabled.</string>
+    <string>Pingo uses Wi-Fi network names to reconnect the current network and join a backup network you select.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Pingo uses the current Wi-Fi network name only to reconnect that same network when Auto-Fix is enabled.</string>
+    <string>Pingo uses Wi-Fi network names to reconnect the current network and join a backup network you select.</string>
     <key>LSUIElement</key>
     <true/>
 </dict>

@@ -33,6 +33,7 @@ Pingo lives quietly in the menu bar with no Dock icon and no main window. It che
 | **Native alerts** | Get notified when the connection drops and when it returns, including the outage duration. |
 | **Live history** | See session uptime, total checks, failures, and recent connection results. |
 | **Auto-Fix Wi-Fi** | Reconnect the active network without turning the Wi-Fi radio off. |
+| **Backup network** | Switch once to a selected Wi-Fi network after three consecutive failed checks. |
 | **Flexible checks** | Choose any interval from 1 to 60 seconds or run an immediate check. |
 | **Built for macOS** | A lightweight Swift and AppKit app with native controls, SF Symbols, and no runtime dependencies. |
 
@@ -55,7 +56,15 @@ Auto-Fix is optional and disabled by default. When enabled, Pingo remembers the 
 Pingo checks that the network and saved credentials are available before disconnecting. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
 
 > [!NOTE]
-> macOS requires Location access to reveal the current Wi-Fi network name. Pingo requests this permission only when Auto-Fix is enabled and uses the network name only to reconnect that same network.
+> macOS requires Location access to reveal Wi-Fi network names. Pingo requests this permission when Auto-Fix is enabled or when you open the backup network selector.
+
+## Backup network
+
+Open **Choose Backup Network** in Pingo's menu and select a nearby Wi-Fi network. Selecting one enables failover; use **Disable Backup** in the same submenu to turn it off.
+
+When three consecutive internet checks fail on the current network, Pingo tries the selected backup once and verifies internet access after joining it. If Auto-Fix is enabled, Pingo first reconnects the current network after the initial failed check. Pingo does not alternate repeatedly between networks during an outage or automatically switch back to the primary network.
+
+The backup must be in range and either open or have a password already saved in the macOS Keychain. Pingo stores the selected network name, but retrieves its password from Keychain only when it needs to connect.
 
 ## Install
 
@@ -77,7 +86,7 @@ Notifications use macOS's script notification channel and appear as **Script Edi
 
 Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
 
-When Auto-Fix is enabled, Pingo asks macOS for the current Wi-Fi network name and retrieves its saved password through the system Keychain API so CoreWLAN can reconnect. Neither value is persisted, logged, or transmitted by Pingo.
+For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and retrieves saved passwords through the system Keychain API when connecting. The selected backup network is stored in `UserDefaults`; passwords are never persisted, logged, or transmitted by Pingo.
 
 ## Build from source
 

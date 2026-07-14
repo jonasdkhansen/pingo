@@ -10,6 +10,10 @@ private enum ConnectionState {
     case online, offline, paused
 }
 
+private enum WiFiRecoveryState {
+    case idle, reconnectingPrimary, joiningBackup
+}
+
 private let timeFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "HH:mm:ss"
@@ -375,6 +379,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private var isOnline: Bool?          // nil until the first check completes
     private var downSince: Date?
     private var checkInFlight = false
+    private var consecutiveFailures = 0
+    private var failureNetworkSSIDData: Data?
+    private var backupAttemptedThisOutage = false
 
     // Stats
     private var totalPings = 0
@@ -389,9 +396,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         return (1...60).contains(stored) ? stored : 15
     }()
     private var autoFixEnabled = UserDefaults.standard.bool(forKey: "autoFixWifi")
+    private var backupSSIDData = UserDefaults.standard.data(forKey: "backupSSIDData")
+    private var backupSSIDName = UserDefaults.standard.string(forKey: "backupSSIDName")
 
-    // Auto-fix state
-    private var autoFixInFlight = false
+    // Wi-Fi recovery state
+    private var recoveryState = WiFiRecoveryState.idle
+    private var recoveryGeneration = 0
     private var lastAutoFix: Date?
     // Minimum time between Wi-Fi cycles, so a genuine outage (router/ISP down)
     // doesn't make us toggle Wi-Fi on every failed check.
@@ -408,6 +418,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private var pauseRow: MenuRow!
     private var autoFixSwitch: GreenSwitch!
     private var intervalValueLabel: NSTextField!
+    private let backupMenu = NSMenu(title: "Backup Network")
+    private var backupMenuItem: NSMenuItem!
+    private var backupScanInFlight = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         locationManager.delegate = self
@@ -438,6 +451,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         menu.addItem(rowItem(checkRow, keyEquivalent: "r"))
 
         menu.addItem(makeAutoFixSwitchItem())
+
+        backupMenu.delegate = self
+        backupMenuItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        backupMenuItem.image = NSImage(systemSymbolName: "wifi.router",
+                           accessibilityDescription: "Backup Network")
+        backupMenuItem.toolTip = "Switch after three consecutive failed internet checks"
+        backupMenuItem.submenu = backupMenu
+        menu.addItem(backupMenuItem)
+        updateBackupMenuTitle()
 
         menu.addItem(.separator())
         menu.addItem(makeIntervalSliderItem())
@@ -587,6 +609,125 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
     }
 
+    // MARK: - Backup network selection
+
+    private func updateBackupMenuTitle() {
+        backupMenuItem?.title = backupSSIDName.map { "Backup Network: \($0)" } ?? "Choose Backup Network"
+    }
+
+    private func refreshBackupMenu() {
+        refreshBackupMenuHeader()
+
+        guard locationManager.authorizationStatus == .authorizedAlways else {
+            let item = NSMenuItem(title: "Location Access Required", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            backupMenu.addItem(item)
+            if locationManager.authorizationStatus == .notDetermined {
+                locationManager.requestWhenInUseAuthorization()
+            } else {
+                let settings = NSMenuItem(title: "Open Location Settings…",
+                                          action: #selector(openLocationSettings), keyEquivalent: "")
+                settings.target = self
+                backupMenu.addItem(settings)
+            }
+            return
+        }
+
+        let scanning = NSMenuItem(title: "Scanning…", action: nil, keyEquivalent: "")
+        scanning.isEnabled = false
+        backupMenu.addItem(scanning)
+        guard !backupScanInFlight else { return }
+        backupScanInFlight = true
+
+        DispatchQueue.global().async { [weak self] in
+            let interface = CWWiFiClient.shared().interface()
+            let currentSSIDData = interface?.ssidData()
+            let scanResult = Result { try interface?.scanForNetworks(withName: nil) ?? [] }
+            DispatchQueue.main.async {
+                self?.backupScanInFlight = false
+                self?.showBackupNetworks(scanResult, excluding: currentSSIDData)
+            }
+        }
+    }
+
+    private func showBackupNetworks(_ result: Result<Set<CWNetwork>, Error>, excluding currentSSIDData: Data?) {
+        refreshBackupMenuHeader()
+
+        switch result {
+        case .success(let networks):
+            var strongestBySSID: [Data: CWNetwork] = [:]
+            for network in networks {
+                guard let ssidData = network.ssidData, let ssid = network.ssid, !ssid.isEmpty,
+                      ssidData != currentSSIDData else { continue }
+                if let existing = strongestBySSID[ssidData], existing.rssiValue >= network.rssiValue { continue }
+                strongestBySSID[ssidData] = network
+            }
+
+            let sortedNetworks = Array(strongestBySSID.values).sorted {
+                ($0.ssid ?? "").localizedCaseInsensitiveCompare($1.ssid ?? "") == .orderedAscending
+            }
+            if sortedNetworks.isEmpty {
+                let item = NSMenuItem(title: "No Other Networks Found", action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                backupMenu.addItem(item)
+            }
+            for network in sortedNetworks {
+                guard let ssidData = network.ssidData, let ssid = network.ssid else { continue }
+                let item = NSMenuItem(title: ssid, action: #selector(selectBackupNetwork(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = network
+                item.state = ssidData == backupSSIDData ? .on : .off
+                backupMenu.addItem(item)
+            }
+        case .failure(let error):
+            let item = NSMenuItem(title: "Scan Failed: \(error.localizedDescription)", action: nil,
+                                  keyEquivalent: "")
+            item.isEnabled = false
+            backupMenu.addItem(item)
+        }
+    }
+
+    private func refreshBackupMenuHeader() {
+        backupMenu.removeAllItems()
+        if backupSSIDData != nil {
+            let disable = NSMenuItem(title: "Disable Backup", action: #selector(disableBackupNetwork),
+                                     keyEquivalent: "")
+            disable.target = self
+            backupMenu.addItem(disable)
+            backupMenu.addItem(.separator())
+        }
+    }
+
+    @objc private func selectBackupNetwork(_ sender: NSMenuItem) {
+        guard let network = sender.representedObject as? CWNetwork,
+              let ssidData = network.ssidData else { return }
+        if !network.supportsSecurity(.none), Self.savedWifiPassword(for: ssidData) == nil {
+            notify(title: "Backup Network Not Selected",
+                   body: "No saved password is available for “\(sender.title)”. Join it once in macOS first.")
+            return
+        }
+        backupSSIDData = ssidData
+        backupSSIDName = sender.title
+        UserDefaults.standard.set(ssidData, forKey: "backupSSIDData")
+        UserDefaults.standard.set(sender.title, forKey: "backupSSIDName")
+        updateBackupMenuTitle()
+    }
+
+    @objc private func disableBackupNetwork() {
+        backupSSIDData = nil
+        backupSSIDName = nil
+        UserDefaults.standard.removeObject(forKey: "backupSSIDData")
+        UserDefaults.standard.removeObject(forKey: "backupSSIDName")
+        updateBackupMenuTitle()
+    }
+
+    @objc private func openLocationSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     // MARK: - Enable / disable
 
     @objc private func toggleMonitoring() {
@@ -605,6 +746,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         } else {
             timer?.invalidate()
             timer = nil
+            recoveryGeneration += 1
+            recoveryState = .idle
+            consecutiveFailures = 0
+            failureNetworkSSIDData = nil
+            backupAttemptedThisOutage = false
             // Forget connection state so resuming doesn't fire a stale notification.
             isOnline = nil
             downSince = nil
@@ -631,7 +777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     private func runCheck() {
-        guard !checkInFlight else { return }
+        guard !checkInFlight, recoveryState == .idle else { return }
         checkInFlight = true
         checkQueue.async { [weak self] in
             let online = Self.pingSucceeds()
@@ -653,6 +799,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         isOnline = online
 
         if online {
+            consecutiveFailures = 0
+            failureNetworkSSIDData = nil
+            backupAttemptedThisOutage = false
             // Only notify on a state change, not on every check.
             if previous == false {
                 var body = "Connection restored."
@@ -664,11 +813,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             downSince = nil
         } else {
             if downSince == nil { downSince = Date() }
+            if monitoringEnabled {
+                let currentSSIDData = CWWiFiClient.shared().interface()?.ssidData()
+                if consecutiveFailures == 0 || currentSSIDData != failureNetworkSSIDData {
+                    consecutiveFailures = 1
+                    failureNetworkSSIDData = currentSSIDData
+                } else {
+                    consecutiveFailures += 1
+                }
+            }
             if previous == true {
                 notify(title: "Internet is down",
                        body: "No reply from \(pingHosts.joined(separator: " or ")). Will keep checking every \(Int(checkInterval))s.")
             }
-            if monitoringEnabled { maybeAutoFixWifi() }
+            if monitoringEnabled {
+                if consecutiveFailures >= 3 {
+                    maybeSwitchToBackup()
+                } else {
+                    maybeAutoFixWifi()
+                }
+            }
         }
 
         setIcon(state: monitoringEnabled ? (online ? .online : .offline) : .paused)
@@ -707,6 +871,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     // MARK: - NSMenuDelegate (live refresh while the menu is open)
 
     func menuWillOpen(_ menu: NSMenu) {
+        if menu === backupMenu {
+            refreshBackupMenu()
+            return
+        }
         refreshUI()
         let refresh = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshUI()
@@ -716,6 +884,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     func menuDidClose(_ menu: NSMenu) {
+        guard menu !== backupMenu else { return }
         menuRefreshTimer?.invalidate()
         menuRefreshTimer = nil
         HelpButton.closeHelp()
@@ -726,7 +895,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     /// Remembers and reconnects the active Wi-Fi network when checks fail,
     /// without power-cycling the Wi-Fi radio.
     private func maybeAutoFixWifi() {
-        guard autoFixEnabled, !autoFixInFlight else { return }
+        guard autoFixEnabled, recoveryState == .idle else { return }
         if let last = lastAutoFix, Date().timeIntervalSince(last) < autoFixCooldown { return }
 
         guard locationManager.authorizationStatus == .authorizedAlways else {
@@ -735,8 +904,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             return
         }
 
-        autoFixInFlight = true
+        recoveryState = .reconnectingPrimary
         lastAutoFix = Date()
+        let generation = recoveryGeneration
 
         notify(title: "Auto-Fix Wi-Fi",
                body: "Internet not answering — reconnecting the current Wi-Fi network.")
@@ -744,15 +914,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         DispatchQueue.global().async { [weak self] in
             let reconnectError = Self.reconnectCurrentWifi()
             DispatchQueue.main.async {
-                self?.autoFixInFlight = false
+                guard let self, generation == self.recoveryGeneration else { return }
                 if let reconnectError {
-                    self?.notify(title: "Auto-Fix Wi-Fi couldn't reconnect", body: reconnectError)
+                    self.recoveryState = .idle
+                    self.notify(title: "Auto-Fix Wi-Fi couldn't reconnect", body: reconnectError)
                     return
                 }
                 // Give the network stack a moment to settle, then verify right
                 // away instead of waiting for the next scheduled check.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
-                    self?.runCheck()
+                    guard generation == self.recoveryGeneration else { return }
+                    self.recoveryState = .idle
+                    if self.monitoringEnabled { self.runCheck() }
+                }
+            }
+        }
+    }
+
+    private func maybeSwitchToBackup() {
+        guard let backupSSIDData, let backupSSIDName,
+              !backupAttemptedThisOutage, recoveryState == .idle else { return }
+        guard CWWiFiClient.shared().interface()?.ssidData() != backupSSIDData else { return }
+
+        guard locationManager.authorizationStatus == .authorizedAlways else {
+            backupAttemptedThisOutage = true
+            notify(title: "Backup Network needs Location access",
+                     body: "Allow Location access for Pingo so it can find and join “\(backupSSIDName)”.")
+            return
+        }
+
+        backupAttemptedThisOutage = true
+        recoveryState = .joiningBackup
+        let generation = recoveryGeneration
+        notify(title: "Switching to Backup Network",
+             body: "Three checks failed — trying “\(backupSSIDName)”.")
+
+        DispatchQueue.global().async { [weak self] in
+            let connectionError = Self.connectWifi(to: backupSSIDData, named: backupSSIDName)
+            DispatchQueue.main.async {
+                guard let self, generation == self.recoveryGeneration else { return }
+                if let connectionError {
+                    self.recoveryState = .idle
+                    self.notify(title: "Backup Network couldn't connect", body: connectionError)
+                    return
+                }
+                self.notify(title: "Connected to Backup Network",
+                            body: "Joined “\(backupSSIDName)”. Verifying internet access.")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                    guard generation == self.recoveryGeneration else { return }
+                    self.recoveryState = .idle
+                    if self.monitoringEnabled { self.runCheck() }
                 }
             }
         }
@@ -769,35 +980,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             return "Pingo couldn't identify the current Wi-Fi network."
         }
 
+        return connectWifi(to: ssidData, named: ssid)
+    }
+
+    private static func connectWifi(to ssidData: Data, named ssid: String) -> String? {
+        guard let interface = CWWiFiClient.shared().interface(), interface.powerOn() else {
+            return "The Wi-Fi interface is unavailable or powered off."
+        }
+
         let networks: Set<CWNetwork>
         do {
             networks = try interface.scanForNetworks(withSSID: ssidData)
         } catch {
-            return "The current network couldn't be found: \(error.localizedDescription)"
+            return "“\(ssid)” couldn't be found: \(error.localizedDescription)"
         }
         guard let network = networks.max(by: { $0.rssiValue < $1.rssiValue }) else {
-            return "The Wi-Fi network “\(ssid)” is no longer in range."
+            return "The Wi-Fi network “\(ssid)” is not in range."
         }
 
-        var password: NSString?
-        if !network.supportsSecurity(.none) {
-            let userStatus = CWKeychainFindWiFiPassword(.user, ssidData, &password)
-            if userStatus != errSecSuccess {
-                let systemStatus = CWKeychainFindWiFiPassword(.system, ssidData, &password)
-                guard systemStatus == errSecSuccess, password != nil else {
-                    return "No saved password is available for “\(ssid)”."
-                }
+        let password: String?
+        if network.supportsSecurity(.none) {
+            password = nil
+        } else {
+            guard let savedPassword = savedWifiPassword(for: ssidData) else {
+                return "No saved password is available for “\(ssid)”."
             }
+            password = savedPassword
         }
 
         interface.disassociate()
         Thread.sleep(forTimeInterval: 1)
         do {
-            try interface.associate(to: network, password: password as String?)
+            try interface.associate(to: network, password: password)
             return nil
         } catch {
             return "Could not rejoin “\(ssid)”: \(error.localizedDescription)"
         }
+    }
+
+    private static func savedWifiPassword(for ssidData: Data) -> String? {
+        var password: NSString?
+        if CWKeychainFindWiFiPassword(.user, ssidData, &password) == errSecSuccess,
+           let password {
+            return password as String
+        }
+        password = nil
+        if CWKeychainFindWiFiPassword(.system, ssidData, &password) == errSecSuccess,
+           let password {
+            return password as String
+        }
+        return nil
     }
 
     // MARK: - Icon & notifications
