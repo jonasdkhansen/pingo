@@ -1,6 +1,7 @@
 import AppKit
 import CoreLocation
 import CoreWLAN
+import UniformTypeIdentifiers
 
 // Ping several public resolvers; we're "online" if any one of them replies, so a
 // single provider's blip doesn't trigger a false "internet down" alert.
@@ -42,6 +43,12 @@ private let timeFormatter: DateFormatter = {
 private let logDateFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateFormat = "MMM d, HH:mm:ss"
+    return f
+}()
+
+private let exportDateFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
 }()
 
@@ -1436,9 +1443,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
 
         outageLogMenu.addItem(.separator())
+        let export = NSMenuItem(title: "Export Full Log…", action: #selector(exportOutageLog), keyEquivalent: "")
+        export.target = self
+        outageLogMenu.addItem(export)
         let clear = NSMenuItem(title: "Clear Log", action: #selector(clearOutageLog), keyEquivalent: "")
         clear.target = self
         outageLogMenu.addItem(clear)
+    }
+
+    @objc private func exportOutageLog() {
+        let panel = NSSavePanel()
+        panel.title = "Export Outage Log"
+        panel.nameFieldStringValue = "pingo-outage-log.csv"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let exportedAt = Date()
+        let rows = outages.map { outage -> String in
+            let end = outage.end
+            let duration = (end ?? exportedAt).timeIntervalSince(outage.start)
+            return [
+                exportDateFormatter.string(from: outage.start),
+                end.map { exportDateFormatter.string(from: $0) } ?? "",
+                String(format: "%.3f", duration),
+                end == nil ? "ongoing" : "completed"
+            ].map(Self.csvField).joined(separator: ",")
+        }
+        let csv = (["start,end,duration_seconds,status"] + rows).joined(separator: "\n") + "\n"
+
+        do {
+            try csv.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     @objc private func clearOutageLog() {
@@ -1471,6 +1508,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         if h > 0 { return "\(h)h \(m)m" }
         if m > 0 { return "\(m)m \(s)s" }
         return "\(s)s"
+    }
+
+    private static func csvField(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 }
 

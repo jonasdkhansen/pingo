@@ -32,6 +32,7 @@ Pingo lives quietly in the menu bar with no Dock icon and no main window. It che
 | **Instant status** | A green or red menu bar indicator shows whether the internet is responding. |
 | **Native alerts** | Get notified when the connection drops and when it returns, including the outage duration. |
 | **Live history** | See session uptime, total checks, failures, and recent connection results. |
+| **Outage log** | Keep the latest 100 outages and export the complete retained log as CSV. |
 | **Auto-Fix Wi-Fi** | Reconnect the active network without turning the Wi-Fi radio off. |
 | **Backup network** | Switch once to a selected Wi-Fi network after three consecutive failed checks. |
 | **Update checks** | Check GitHub Releases for a newer version only when you request it. |
@@ -48,7 +49,7 @@ When the connection changes state, Pingo responds immediately:
 - **Connection restored:** the indicator returns to green and the notification includes how long the outage lasted.
 - **Monitoring paused:** checks stop completely and the menu bar icon dims.
 
-Open Pingo from the menu bar to see the current status, recent history, session statistics, check interval, and quick controls. Settings persist across launches.
+Open Pingo from the menu bar to see the current status, recent history, session statistics, check interval, and quick controls. Pingo keeps the 100 most recent outages. Open **Outage Log** and choose **Export Full Log…** to save every retained outage as CSV, including its start and end time, duration, and status. Settings persist across launches.
 
 ## Auto-Fix Wi-Fi
 
@@ -113,7 +114,7 @@ Notifications use macOS's script notification channel and appear as **Script Edi
 
 ## Privacy
 
-Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. When you choose **Check for Updates…**, Pingo makes a single request to the GitHub Releases API; it does not check in the background. Connection history and session statistics remain in memory and disappear when the app quits; only preferences such as the check interval and enabled state are stored in `UserDefaults`.
+Pingo has no analytics, telemetry, accounts, or network service of its own. It sends ICMP echo requests only to the configured connectivity-check hosts. When you choose **Check for Updates…**, Pingo makes a single request to the GitHub Releases API; it does not check in the background. Connection history and session statistics remain in memory and disappear when the app quits. The 100 most recent outages and preferences such as the check interval and enabled state are stored locally in `UserDefaults`; exporting the log writes a CSV only to the location you choose.
 
 For Auto-Fix and backup failover, Pingo asks macOS for visible Wi-Fi network names and access-point identifiers, and retrieves saved passwords through the system Keychain API when selecting or connecting to a protected network. The selected backup network's SSID, BSSID, and security fingerprint are stored in `UserDefaults`; passwords are kept only in memory and are never persisted, logged, or transmitted by Pingo.
 
