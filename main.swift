@@ -463,9 +463,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     // Wi-Fi recovery state
     private var recoveryState = WiFiRecoveryState.idle
     private var recoveryGeneration = 0
-    private var lastAutoFix: Date?
-    // Minimum time between Wi-Fi cycles, so a genuine outage (router/ISP down)
-    // doesn't make us toggle Wi-Fi on every failed check.
+    private var nextAutoFixAttempt: Date?
+    // A failed association can happen while an access point is still returning,
+    // so retry it quickly. A completed rejoin uses a longer guard to avoid
+    // cycling Wi-Fi during an ISP or router outage.
+    private let autoFixRetryDelay: TimeInterval = 10
     private let autoFixCooldown: TimeInterval = 60
 
     // Menu views
@@ -744,7 +746,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
 
         let helpButton = HelpButton(
             title: "Auto-Fix Wi-Fi",
-            text: "When the internet stops answering, reconnect the same Wi-Fi network without powering Wi-Fi off. Location access is required so Pingo can identify the network name. Runs at most once per minute so a real outage isn't made worse.")
+            text: "When the internet stops answering, reconnect the same Wi-Fi network without powering Wi-Fi off. Location access is required so Pingo can identify the network name. Failed reconnects retry after 10 seconds; a completed rejoin waits one minute before another attempt.")
         helpButton.setFrameOrigin(NSPoint(x: autoFixSwitch.frame.minX - helpButton.frame.width - 8,
                                           y: (container.frame.height - helpButton.frame.height) / 2))
         container.addSubview(helpButton)
@@ -1104,7 +1106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     /// without power-cycling the Wi-Fi radio.
     private func maybeAutoFixWifi() {
         guard autoFixEnabled, recoveryState == .idle else { return }
-        if let last = lastAutoFix, Date().timeIntervalSince(last) < autoFixCooldown { return }
+        if let nextAutoFixAttempt, Date() < nextAutoFixAttempt { return }
 
         guard hasLocationAccess else {
             if locationManager.authorizationStatus == .notDetermined {
@@ -1117,7 +1119,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         }
 
         recoveryState = .reconnectingPrimary
-        lastAutoFix = Date()
         let generation = recoveryGeneration
 
         notify(title: "Auto-Fix Wi-Fi",
@@ -1129,9 +1130,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
                 guard let self, generation == self.recoveryGeneration else { return }
                 if let reconnectError {
                     self.recoveryState = .idle
+                    self.nextAutoFixAttempt = Date().addingTimeInterval(self.autoFixRetryDelay)
                     self.notify(title: "Auto-Fix Wi-Fi couldn't reconnect", body: reconnectError)
+                    // Check again when the short retry window opens instead of
+                    // waiting for the user-selected monitoring interval.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + self.autoFixRetryDelay) {
+                        guard generation == self.recoveryGeneration,
+                              self.monitoringEnabled else { return }
+                        self.runCheck()
+                    }
                     return
                 }
+                self.nextAutoFixAttempt = Date().addingTimeInterval(self.autoFixCooldown)
                 // Give the network stack a moment to settle, then verify right
                 // away instead of waiting for the next scheduled check.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8) {

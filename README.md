@@ -23,6 +23,15 @@
   <sub>Connection status, recent checks, Wi-Fi recovery, and manual update checks — all one click away.</sub>
 </div>
 
+<div align="center">
+  <img src="assets/pingo-outage-log-preview-light.png" width="49%" alt="Pingo's outage log and CSV export control in light mode">
+  <img src="assets/pingo-outage-log-preview.png" width="49%" alt="Pingo's outage log and CSV export control in dark mode">
+</div>
+
+<div align="center">
+  <sub>Review recent outages, then export the complete retained log as CSV.</sub>
+</div>
+
 Pingo lives quietly in the menu bar with no Dock icon and no main window. It checks two independent public DNS endpoints and changes state only when both stop responding, helping avoid false alarms caused by a single provider.
 
 ## At a glance
@@ -56,6 +65,8 @@ Open Pingo from the menu bar to see the current status, recent history, session 
 Auto-Fix is optional and disabled by default. When enabled, Pingo identifies the active access point, disconnects from it, and explicitly rejoins that same access point. The Wi-Fi radio stays powered on throughout the process.
 
 Pingo verifies the access point's BSSID and advertised security capabilities before disconnecting. It refuses same-name access points with a different identity or security configuration. Auto-Fix can reconnect the current network without a saved password when passwordless association succeeds, but backup networks remain protected-only. A one-minute cooldown prevents repeated reconnect attempts during a wider outage.
+
+If a reconnection cannot be started because the access point is still unavailable, Pingo tries again after 10 seconds instead of waiting for the full cooldown.
 
 > [!NOTE]
 > macOS requires Location access to reveal Wi-Fi network names. Pingo requests this on first launch, and if permission was denied, Pingo offers an **Open Location Settings** shortcut so you can re-enable access.
@@ -160,6 +171,9 @@ Pingo intentionally keeps its implementation small. The complete app lives in [m
 | `assets/render-app-icon.swift` | Icon renderer |
 | `assets/pingo-readme-preview.png` | Light and dark README product preview |
 | `assets/render-readme-preview.swift` | README product preview renderer |
+| `assets/pingo-outage-log-preview.png` | Outage-log preview |
+| `assets/pingo-outage-log-preview-light.png` | Light outage-log preview |
+| `assets/render-outage-log-preview.swift` | Outage-log preview renderer |
 | `assets/Pingo.icns` | macOS icon bundle |
 
 ## Test an outage
