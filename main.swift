@@ -38,6 +38,19 @@ private let timeFormatter: DateFormatter = {
     return f
 }()
 
+// Longer form used in the outage log, where entries may span multiple days.
+private let logDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d, HH:mm:ss"
+    return f
+}()
+
+/// One recorded outage. `end` is nil while the outage is still in progress.
+private struct OutageRecord: Codable {
+    let start: Date
+    var end: Date?
+}
+
 // MARK: - Menu building blocks
 
 private let menuRowWidth: CGFloat = 320
@@ -417,6 +430,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private var lastPingDate: Date?
     private var history: [Bool] = []     // recent check results, oldest first
 
+    // Persisted log of past outages, oldest first. The last entry may still be
+    // ongoing (end == nil); everything else has a known start and end.
+    private var outages: [OutageRecord] = {
+        guard let data = UserDefaults.standard.data(forKey: "outageLog"),
+              let decoded = try? JSONDecoder().decode([OutageRecord].self, from: data)
+        else { return [] }
+        return decoded
+    }()
+
     // Settings (persisted)
     private var monitoringEnabled = (UserDefaults.standard.object(forKey: "monitoringEnabled") as? Bool) ?? true
     private var checkInterval: TimeInterval = {
@@ -453,9 +475,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     private let backupMenu = NSMenu(title: "Backup Network")
     private var backupMenuItem: NSMenuItem!
     private var backupScanInFlight = false
+    private let outageLogMenu = NSMenu(title: "Outage Log")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         locationManager.delegate = self
+        // If the app quit mid-outage, resume that ongoing outage so the first
+        // check continues it (when still down) or closes it (when back), rather
+        // than starting a duplicate or leaving it "ongoing" forever.
+        if let last = outages.last, last.end == nil {
+            downSince = last.start
+        }
         if backupSSIDData != nil && (backupBSSID == nil || backupSecurityFingerprint == nil) {
             disableBackupNetwork()
         }
@@ -466,6 +495,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         menu.addItem(.separator())
         menu.addItem(makeStatsItem())
         menu.addItem(viewItem(historyView))
+
+        outageLogMenu.delegate = self
+        let logItem = NSMenuItem(title: "Outage Log", action: nil, keyEquivalent: "")
+        logItem.image = NSImage(systemSymbolName: "clock.arrow.circlepath",
+                                accessibilityDescription: "Outage Log")
+        logItem.toolTip = "Past outages with their start time and duration"
+        logItem.submenu = outageLogMenu
+        menu.addItem(logItem)
+
         menu.addItem(.separator())
 
         pauseRow = MenuRow(
@@ -964,9 +1002,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
                 }
                 notify(title: "Internet is back", body: body)
             }
+            recordOutageEnd(Date())
             downSince = nil
         } else {
-            if downSince == nil { downSince = Date() }
+            if downSince == nil {
+                downSince = Date()
+                recordOutageStart(downSince!)
+            }
             if monitoringEnabled {
                 let currentSSIDData = CWWiFiClient.shared().interface()?.ssidData()
                 if consecutiveFailures == 0 || currentSSIDData != failureNetworkSSIDData {
@@ -1030,6 +1072,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             refreshBackupMenu()
             return
         }
+        if menu === outageLogMenu {
+            refreshOutageLog()
+            return
+        }
         refreshUI()
         let refresh = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.refreshUI()
@@ -1039,7 +1085,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
     }
 
     func menuDidClose(_ menu: NSMenu) {
-        guard menu !== backupMenu else { return }
+        guard menu !== backupMenu, menu !== outageLogMenu else { return }
         menuRefreshTimer?.invalidate()
         menuRefreshTimer = nil
         HelpButton.closeHelp()
@@ -1328,6 +1374,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
         } catch {
             return false
         }
+    }
+
+    // MARK: - Outage log
+
+    /// Begins a new outage record. Called on the transition into a down state.
+    private func recordOutageStart(_ date: Date) {
+        outages.append(OutageRecord(start: date, end: nil))
+        saveOutages()
+    }
+
+    /// Closes the most recent still-open outage. No-op if none is open, so it's
+    /// safe to call on any restored check (including one that closes a dangling
+    /// outage left over from a previous session).
+    private func recordOutageEnd(_ date: Date) {
+        guard let idx = outages.lastIndex(where: { $0.end == nil }) else { return }
+        outages[idx].end = date
+        saveOutages()
+    }
+
+    private func saveOutages() {
+        // Keep the log bounded; the newest entries are the ones worth keeping.
+        if outages.count > 100 { outages.removeFirst(outages.count - 100) }
+        if let data = try? JSONEncoder().encode(outages) {
+            UserDefaults.standard.set(data, forKey: "outageLog")
+        }
+    }
+
+    /// Rebuilds the Outage Log submenu, newest first. Called each time it opens.
+    private func refreshOutageLog() {
+        outageLogMenu.removeAllItems()
+
+        guard !outages.isEmpty else {
+            let empty = NSMenuItem(title: "No outages recorded", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            outageLogMenu.addItem(empty)
+            return
+        }
+
+        let count = outages.count
+        let header = NSMenuItem(title: "\(count) outage\(count == 1 ? "" : "s") · newest first",
+                                action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        outageLogMenu.addItem(header)
+        outageLogMenu.addItem(.separator())
+
+        for outage in outages.reversed() {
+            let duration = Self.formatDuration((outage.end ?? Date()).timeIntervalSince(outage.start))
+            let item: NSMenuItem
+            if let end = outage.end {
+                item = NSMenuItem(title: "\(logDateFormatter.string(from: outage.start)) · \(duration)",
+                                  action: nil, keyEquivalent: "")
+                item.toolTip = "Down \(logDateFormatter.string(from: outage.start)) → \(timeFormatter.string(from: end))"
+            } else {
+                item = NSMenuItem(title: "\(logDateFormatter.string(from: outage.start)) · \(duration) · ongoing",
+                                  action: nil, keyEquivalent: "")
+                item.toolTip = "Down since \(logDateFormatter.string(from: outage.start)) — still ongoing"
+            }
+            item.isEnabled = false
+            outageLogMenu.addItem(item)
+        }
+
+        outageLogMenu.addItem(.separator())
+        let clear = NSMenuItem(title: "Clear Log", action: #selector(clearOutageLog), keyEquivalent: "")
+        clear.target = self
+        outageLogMenu.addItem(clear)
+    }
+
+    @objc private func clearOutageLog() {
+        // Preserve an ongoing outage so the current state isn't lost.
+        outages = outages.filter { $0.end == nil }
+        saveOutages()
     }
 
     private func notify(title: String, body: String) {
