@@ -1465,11 +1465,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CLLoca
             return [
                 exportDateFormatter.string(from: outage.start),
                 end.map { exportDateFormatter.string(from: $0) } ?? "",
+                Self.formatDuration(duration),
                 String(format: "%.3f", duration),
                 end == nil ? "ongoing" : "completed"
             ].map(Self.csvField).joined(separator: ",")
         }
-        let csv = (["start,end,duration_seconds,status"] + rows).joined(separator: "\n") + "\n"
+        let csv = (["start,end,duration,duration_seconds,status"] + rows).joined(separator: "\n") + "\n"
 
         do {
             try csv.write(to: url, atomically: true, encoding: .utf8)
