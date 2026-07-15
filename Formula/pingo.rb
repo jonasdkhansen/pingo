@@ -2,8 +2,8 @@ class Pingo < Formula
   desc "Tiny network monitor for the macOS menu bar"
   homepage "https://github.com/jonasdkhansen/pingo"
   url "https://github.com/jonasdkhansen/pingo.git",
-      tag:      "v1.4.0",
-      revision: "ca4a2dabdd83a96cdc50cb59eeec4c87c1efe4c7"
+      tag:      "v1.5.0",
+      revision: "e384ee5c906989acc4cb10ab2766d10d03f1a84a"
   license "Apache-2.0"
 
   depends_on macos: :big_sur
